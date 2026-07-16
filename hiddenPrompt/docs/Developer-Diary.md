@@ -28,7 +28,7 @@ Next Goal:
 Learn Socket.IO fundamentals.
 
 
-## Day 1
+## Day 2
 
 Date:
 July 15, 2026
@@ -51,5 +51,31 @@ How to communicate between client and server through socket io and about web soc
 
 Next Goal:
 step by step adding more socket functions.
+
+
+## Day 3
+
+Date:
+July 16, 2026
+
+Goal:
+Creating game room system using socket.
+
+Completed:
+- player can join rooms.
+- if player joins or exit the room the notification will be shown to other players in the room.
+- Player cant use the username if the username already exists in the room.
+
+Challenges:
+- Problem with updating the player list when someone join or exit the room.
+
+Decision:
+Used map data structure to store room and player username and socketId.
+
+What I Learned:
+How room system work , how to create room , join room , leave room.
+
+Next Goal:
+Showing player list in the Lobby -> Creating Lobby.
 
 
