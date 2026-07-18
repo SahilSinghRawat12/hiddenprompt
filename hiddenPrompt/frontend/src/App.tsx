@@ -3,12 +3,20 @@ import { useEffect, useState } from 'react'
 import { socket } from "./socket/socket";
 import toast from 'react-hot-toast';
 
+// Define this on your React Frontend:
+type RoomUser = {
+    username: string;
+    socketId: string;
+};
+
 function App() {
   
-  const [user , setUser] = useState("");
   const [userInput , setUserInput] = useState("");
   const [roomInput , setRoomInput] = useState("");
+
   const [room , setCurrentRoom] = useState("");
+
+  const [players , setPlayers] = useState<RoomUser[]>([]);
 
   const [joinedUser , setJoinedUser] = useState<string[]> ([])
 
@@ -23,17 +31,23 @@ function App() {
   
       const handleUserJoined = (msg: string) => {
            setJoinedUser((prev) => [...prev , msg ]);
+           
       }
 
-      socket.on("join-error" , (msg) => {
+      const handleJoinError = (msg:string) => {
         toast.error(msg);
-      });
+      }
 
       socket.on("user-joined" , handleUserJoined);
+      socket.on("join-error", handleJoinError);
 
       socket.on("user-left" , (msg) => {
         console.log(msg);
         toast(msg);
+      });
+
+      socket.on("room-updated" , (data: {roomCode: string; players: RoomUser[]}) => {
+          setPlayers(data.players)
       })
 
       //this runs when the component unmounts
@@ -41,15 +55,21 @@ function App() {
       return () => {
         socket.off("connect");
         socket.off("disconnect");
+        socket.off("join-error");
         socket.off("user-joined" , handleUserJoined);
+        socket.off("user-left");
+        socket.off("room-updated");
       }
   } , []);
 
-  const handleClick = () => {
+  const submitHandler = (e: React.SubmitEvent) => {
+
+    e.preventDefault();
+
     setJoinedUser([]);
 
     socket.emit("join-room" , {user:userInput , room: roomInput});
-
+    
     setCurrentRoom(roomInput);
 
     setUserInput("");
@@ -58,30 +78,42 @@ function App() {
 
   return (
     <>
-    <div >
-      HiddenPrompt
+    <div className='text-center p-8 bg-gray-300 flex flex-col gap-3'>
+      <h1>HiddenPrompt</h1>
+      <h1>ROOM CODE: {room}</h1>
     </div>
 
-    <div className='bg-red-400'>
+    <form onSubmit={submitHandler} className='flex flex-col items-center justify-center p-8 bg-gray-400 gap-3 '>
       <label>Username</label>
         <input 
         placeholder='username'
         value={userInput}
-        onChange={(e) => setUserInput(e.target.value)}/>
+        onChange={(e) => setUserInput(e.target.value)}
+        className='outline-1'/>
 
         <label>Room Code</label>
         <input 
         placeholder='Enter Room Code'
         value={roomInput}
-        onChange={(e) => setRoomInput(e.target.value)}/>
+        onChange={(e) => setRoomInput(e.target.value)}
+        className='outline-1'/>
 
-        <button onClick={handleClick} className='bg-yellow-400'>Join Room</button>
-    </div>
+        <button className='bg-white'>Join Room</button>
+    </form>
 
-    <div className='bg-yellow-300 max-w-4xl'>
+    <div className='bg-gray-500 text-center p-8'>
       {
         joinedUser.map((user, index) => (
-            <h1 key={index}>{user}</h1>
+            <h1 key={index}
+            className='p-3'>{user}</h1>
+        ))
+      }
+    </div>
+
+    <div>
+      {
+        players.map((p, index) => (
+          <h1 key={index}>{p.username}</h1>
         ))
       }
     </div>

@@ -1,5 +1,17 @@
 import { Server , Socket } from "socket.io";
 
+export const broadcastRoomState = (io: Server , room: string)=> 
+    {
+    const players = rooms.get(room);
+
+    if(!players) return;
+
+    io.to(room).emit( "room-updated", {
+        roomCode: room,
+        players
+    });
+}
+
 type RoomUser = {
     username: string;
     socketId: string;
@@ -42,7 +54,7 @@ export const registerSocketEvents = (io: Server) => {
                 rooms.set(room , []);
             }
 
-            const users = rooms.get(room)!;
+            const users = rooms.get(room)!  ;
 
             const userNameExists = users.some(
                 (u) => u.username === user
@@ -64,12 +76,13 @@ export const registerSocketEvents = (io: Server) => {
             socket.data.currentRoom = room;
             socket.data.username = user;
 
-            socket.emit("user-joined", `You joined ${room}`);
+            //send data to yourself
+            socket.emit("user-joined" , `You joined room: ${room}`);
+            socket.emit("join-success" , success: true, room: room)
+            //send data to others except yourself
+            socket.to(room).emit("user-joined" , `${user} joined the room`);
             
-            socket.to(room).emit(
-                "user-joined",
-                 `${user} joined ${room}`   
-            );
+            broadcastRoomState(io, room);
          
          });
         
@@ -94,6 +107,7 @@ export const registerSocketEvents = (io: Server) => {
            }
 
            socket.to(room).emit("user-left" , `${socket.data.username} left the room`)
+           broadcastRoomState(io , room);
 
         });
 

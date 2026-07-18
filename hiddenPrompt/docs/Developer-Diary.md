@@ -79,3 +79,27 @@ Next Goal:
 Showing player list in the Lobby -> Creating Lobby.
 
 
+## Day 4
+
+Date:
+July 17, 2026
+
+Goal:
+Creating game Lobby system.
+
+Completed:
+- Player list -> showing the names of players that joined the room.
+
+Challenges:
+- Problem with updating the player list when someone join or exit the room.
+
+Decision:
+Used map data structure to store room and player username and socketId.
+
+What I Learned:
+How to make use of helper functions to write clean code.
+
+Next Goal:
+chat , canvas , game system planning etc.
+
+
