@@ -78,7 +78,7 @@ export const registerSocketEvents = (io: Server) => {
 
             //send data to yourself
             socket.emit("user-joined" , `You joined room: ${room}`);
-            socket.emit("join-success" , success: true, room: room)
+            socket.emit("join-success" , {success: true, room: room})
             //send data to others except yourself
             socket.to(room).emit("user-joined" , `${user} joined the room`);
             

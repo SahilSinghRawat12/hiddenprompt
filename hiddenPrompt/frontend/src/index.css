@@ -1,1 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Courier+Prime&family=JetBrains+Mono&family=Special+Elite&display=swap');
+
 @import "tailwindcss";
+
+/* themes */
+@theme {
+    --color-background: #131210;
+    --color-paper: #E9DFC4;
+    --color-accent: #AD2B1E;
+    --color-ink: #211D15;
+    --color-border: #3A342A;
+    --color-yellowish: #C3B487;
+}
+
+@theme {
+  --font-display: "Special Elite", cursive;
+  --font-body: "Courier Prime", monospace;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+

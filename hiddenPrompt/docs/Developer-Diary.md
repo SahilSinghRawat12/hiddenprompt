@@ -103,3 +103,26 @@ Next Goal:
 chat , canvas , game system planning etc.
 
 
+
+
+## Day 5
+
+Date:
+July 19, 2026
+
+Goal:
+Designing the Home and Lobby UI.
+
+Completed:
+- COmpleted the design for Home and Lobby.
+
+Challenges:
+- Structuring and Designing of the page.
+
+Decision:
+Using a dark noir theme for the page.
+
+Next Goal:
+Full creation of the lobby and home page.
+
+
