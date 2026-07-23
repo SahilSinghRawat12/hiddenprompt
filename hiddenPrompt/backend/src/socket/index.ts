@@ -1,4 +1,5 @@
 import { Server , Socket } from "socket.io";
+import { generateRoomCode } from "../utils/generateRoomCode.js";
 
 export const broadcastRoomState = (io: Server , room: string)=> 
     {
@@ -23,8 +24,29 @@ export const registerSocketEvents = (io: Server) => {
 
     io.on("connection" , (socket: Socket) => {
         console.log("Server is connected to Client", socket.id);
+
+        //create room
+        socket.on("create-room" , ({username} : {username: string}) => {
+            
+            //generating random character 
+            let roomCode = generateRoomCode();
+            
+            // If the roomCode already exists then generate code again
+            while(rooms.has(roomCode))
+            {
+                generateRoomCode();
+            }
+
+            // create room and set host
+            rooms.set(roomCode , [{ username , socketId: socket.id }]);
+            
+            // join socket room and notify client
+            socket.join(roomCode);
+            socket.emit("room-created" , {roomCode});
+
+        });
          
-        
+        //join room
          socket.on("join-room" , ({user, room}: {user: string , room: string}) => {
 
             // leave previous room (both socket io room and map)

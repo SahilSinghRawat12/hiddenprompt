@@ -126,3 +126,22 @@ Next Goal:
 Full creation of the lobby and home page.
 
 
+## Day 7
+
+Date:
+July 23, 2026
+
+Goal:
+Finished the home ui and create room.
+
+Completed:
+- COmpleted the home ui and create room.
+
+Challenges:
+- using socket for creatnig the room.
+
+
+Next Goal:
+completing the lobby and canvas.
+
+
