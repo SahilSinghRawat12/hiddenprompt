@@ -1,15 +1,18 @@
 import { Server , Socket } from "socket.io";
 import { generateRoomCode } from "../utils/generateRoomCode.js";
 
-export const broadcastRoomState = (io: Server , room: string)=> 
+export const broadcastRoomState = (io: Server , roomCode: string)=> 
     {
-    const players = rooms.get(room);
+    const room = rooms.get(roomCode);
 
-    if(!players) return;
+    if(!room) return;
 
-    io.to(room).emit( "room-updated", {
-        roomCode: room,
-        players
+    io.to(roomCode).emit( "room-updated", {
+        roomCode,
+        players: room.players,
+        hostSocketId: room.hostSocketId,
+        rounds: room.rounds,
+        guessTime: room.guessTime
     });
 }
 
@@ -18,7 +21,14 @@ type RoomUser = {
     socketId: string;
 }
 
- const rooms = new Map<string , RoomUser[]>();
+type Room = {
+    hostSocketId: string;
+    players: RoomUser[];
+    rounds: number;
+    guessTime: number;
+}
+
+ const rooms = new Map<string , Room>();
 
 export const registerSocketEvents = (io: Server) => {
 
@@ -34,17 +44,44 @@ export const registerSocketEvents = (io: Server) => {
             // If the roomCode already exists then generate code again
             while(rooms.has(roomCode))
             {
-                generateRoomCode();
+                roomCode = generateRoomCode();
             }
 
             // create room and set host
-            rooms.set(roomCode , [{ username , socketId: socket.id }]);
+            rooms.set(roomCode , {
+                hostSocketId: socket.id,
+                players: [
+                    {
+                        username,
+                        socketId: socket.id
+                    }
+                ],
+                rounds: 6,
+                guessTime: 30
+            });
             
             // join socket room and notify client
             socket.join(roomCode);
+
+            //saving socket information
+            socket.data.currentRoom = roomCode;
+            socket.data.username = username;
+
+            broadcastRoomState(io, roomCode);
+
             socket.emit("room-created" , {roomCode});
 
         });
+
+        //get room-state
+        socket.on("get-room-state" , (room: string) => {
+            if(!rooms.has(room))
+            {
+                return;
+            }
+
+            broadcastRoomState(io , room)
+        })
          
         //join room
          socket.on("join-room" , ({user, room}: {user: string , room: string}) => {
@@ -73,7 +110,8 @@ export const registerSocketEvents = (io: Server) => {
             //create room if needed
             if(!rooms.has(room))
             {
-                rooms.set(room , []);
+                socket.emit("join-error", "Room not found");
+                return;
             }
 
             const users = rooms.get(room)!  ;

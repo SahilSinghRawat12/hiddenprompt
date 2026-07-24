@@ -19,10 +19,11 @@ const Home = () => {
       setShowModal(false);
       navigate(`/lobby/${roomCode}`)
     }
+    
     socket.on("room-created" , handleRoomCreate);
 
     return () => {
-      socket.off("room-created");
+      socket.off("room-created" , handleRoomCreate);
     };
 
   } , [navigate])  // runs ONCE when page renders (because navigate never changes -> because it is a stable function)
