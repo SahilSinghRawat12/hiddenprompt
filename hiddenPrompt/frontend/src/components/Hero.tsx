@@ -1,7 +1,7 @@
 import React from 'react'
 import { EvidenceCard } from './EvidenceCard'
 
-const Hero = ({onCreateRoom}) => {
+const Hero = ({onCreateRoom , onJoinRoom}) => {
   return (
     <section className='text-paper max-w-6xl mx-auto pt-16'>
         <div className='grid grid-cols-1 lg:grid-cols-2 items-center gap-16'>
@@ -31,7 +31,8 @@ const Hero = ({onCreateRoom}) => {
                     onClick={onCreateRoom}
                     >CREATE ROOM</button>
 
-                    <button className='py-3.5 px-6 cursor-pointer border-2 border-paper font-mono text-sm transition-transform hover:-translate-y-1'>JOIN ROOM</button>
+                    <button className='py-3.5 px-6 cursor-pointer border-2 border-paper font-mono text-sm transition-transform hover:-translate-y-1'
+                    onClick={onJoinRoom}>JOIN ROOM</button>
                 </div>
                 {/* button div end */}
                 

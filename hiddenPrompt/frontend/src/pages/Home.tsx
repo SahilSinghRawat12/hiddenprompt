@@ -5,25 +5,37 @@ import Hero from '../components/Hero'
 import UsernameModal from '../components/UsernameModal'
 import { socket } from '../socket/socket'
 import { useNavigate } from 'react-router-dom'
+import JoinRoomModal from '../components/JoinRoomModal'
 
 
 
 const Home = () => {
 
   const navigate = useNavigate();
-  const [showModal , setShowModal] = useState(false);
+  const [showCreateModal , setShowCreateModal] = useState(false);
+  const [showJoinModal , setShowJoinModal] = useState(false);
 
   useEffect(() => {
 
     const handleRoomCreate = ({ roomCode }: {roomCode: string}) => {
-      setShowModal(false);
+      setShowCreateModal(false);
       navigate(`/lobby/${roomCode}`)
+    }
+
+    const handleRoomJoin = ({ success , roomCode}: {success: boolean , roomCode: string}) => {
+      if(success === true)
+      {
+        setShowJoinModal(false);
+        navigate(`/lobby/${roomCode}`)
+      }
     }
     
     socket.on("room-created" , handleRoomCreate);
+    socket.on("join-success", handleRoomJoin);
 
     return () => {
       socket.off("room-created" , handleRoomCreate);
+      socket.off("user-joined", handleRoomJoin);
     };
 
   } , [navigate])  // runs ONCE when page renders (because navigate never changes -> because it is a stable function)
@@ -32,6 +44,16 @@ const Home = () => {
      socket.emit("create-room" , {
       username
      });      
+  };
+
+  const handleJoinRoom = ({roomCode , username}: {roomCode: string , username: string}) =>
+  {
+    socket.emit("join-room" , { username , room: roomCode });
+  };
+
+  const handleSwitchToCreate = () => {
+    setShowJoinModal(false);
+    setShowCreateModal(true);
   }
 
   return (
@@ -41,13 +63,21 @@ const Home = () => {
 
     <main>
       <Hero 
-      onCreateRoom={() => setShowModal(true)}
+      onCreateRoom={() => setShowCreateModal(true)}
+      onJoinRoom={() => setShowJoinModal(true)}
       />
 
-      {showModal && <UsernameModal 
-      isOpen={showModal}
-      onClose={() => setShowModal(false)}
+      {showCreateModal && <UsernameModal 
+      isOpen={showCreateModal}
+      onClose={() => setShowCreateModal(false)}
       onSubmit= {handleCreateRoom}
+      />}
+
+      {showJoinModal && <JoinRoomModal 
+      isOpen={showJoinModal}
+      onClose={() => setShowJoinModal(false)}
+      onSubmit= {handleJoinRoom}
+      onSwitchToCreate={handleSwitchToCreate}
       />}
 
     </main>

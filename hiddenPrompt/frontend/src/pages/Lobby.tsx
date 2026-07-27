@@ -6,16 +6,23 @@ import { socket } from '../socket/socket'
 import { Navigate, useParams } from 'react-router-dom'
 
 
-interface Players {
-  username: string;
-  socketId: string;
+type RoomUser = {
+    username: string;
+    socketId: string;
+}
+
+interface RoomData {
+  hostSocketId: string;
+    players: RoomUser[];
+    rounds: number;
+    guessTime: number;
 }
 
 
 const Lobby = () => {
 
   const { roomCode } = useParams();
-  const [players , setPlayers] = useState<Players[]> ([]);
+  const [roomData , setRoomData] = useState<RoomData | null>(null);
 
   if(!roomCode)
   {
@@ -24,16 +31,20 @@ const Lobby = () => {
 
   useEffect(() => {
     
-    const handleRoomUpdated = ({ players } : { players: Players[] }) => {
-      setPlayers(players);
+    const handleRoomUpdated = (data : RoomData) => {
+      setRoomData(data);
     }
 
+    // LISTEN for the server's response event ("room-updated")
     socket.on("room-updated" , handleRoomUpdated);
+    
+    // EMIT the request event ("get-room-state") to ask the server for data
+    socket.emit("get-room-state" ,roomCode);
 
     return () => {
       socket.off("room-updated", handleRoomUpdated);
     }
-  }, [])
+  }, [roomCode])
 
   return (
     <div className='bg-background min-h-screen'>
@@ -43,7 +54,7 @@ const Lobby = () => {
       <main className='flex justify-center items-center py-18'> 
         <LobbyCard 
         roomCode= {roomCode}
-        players= {players} />
+        players={roomData?.players || []} />
       </main>
 
       <Footer />

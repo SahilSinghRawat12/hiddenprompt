@@ -148,7 +148,25 @@ completing the lobby and canvas.
 ## Day 8
 
 Date:
-July 23, 2026
+July 24, 2026
+
+Goal:
+Finish the lobby ui and functionality.
+
+Completed:
+- COmpleted the lobby ui functionality.
+
+Challenges:
+- using socket for updating the lobby when new player joins.
+
+
+Next Goal:
+Canvas.
+
+## Day 9
+
+Date:
+July 27, 2026
 
 Goal:
 Finish the lobby ui and functionality.

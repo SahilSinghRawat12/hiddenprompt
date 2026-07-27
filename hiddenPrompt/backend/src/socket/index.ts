@@ -37,6 +37,11 @@ export const registerSocketEvents = (io: Server) => {
 
         //create room
         socket.on("create-room" , ({username} : {username: string}) => {
+
+            if (!username?.trim()) {
+                socket.emit("join-error", "Username cannot be empty"); // or "create-error"
+                return;
+            }
             
             //generating random character 
             let roomCode = generateRoomCode();
@@ -67,110 +72,142 @@ export const registerSocketEvents = (io: Server) => {
             socket.data.currentRoom = roomCode;
             socket.data.username = username;
 
-            broadcastRoomState(io, roomCode);
-
             socket.emit("room-created" , {roomCode});
+            broadcastRoomState(io, roomCode);
 
         });
 
-        //get room-state
+
+        //GET ROOM STATE
         socket.on("get-room-state" , (room: string) => {
             if(!rooms.has(room))
             {
                 return;
             }
+            
+            broadcastRoomState(io , room);
+        });
 
-            broadcastRoomState(io , room)
-        })
          
-        //join room
-         socket.on("join-room" , ({user, room}: {user: string , room: string}) => {
+        //JOIN ROOM
+         socket.on("join-room" , ({username, room}: {username: string , room: string}) => {
+
+            const sanitizedUsername = username?.trim();
+            const roomCode = room?.trim().toUpperCase();
+
+            // Validation
+            if (!sanitizedUsername) {
+                socket.emit("join-success", { success: false, message: "Username cannot be empty"}); // or "create-error"
+                return;
+            }
+
+            if (!roomCode) {
+                socket.emit("join-success", { success: false, message: "Room code is required" });
+                return;
+            }
+            
+            //check if target room exists
+            const targetRoom = rooms.get(roomCode);
+
+            if(!targetRoom)
+            {
+                socket.emit("join-success", { success: false, message: "Room not found"});
+                return;
+            }
+
+            //check if username already exists in the target room
+            const userNameExists = targetRoom.players.some(
+                (u) => u.username.toLowerCase() === sanitizedUsername.toLowerCase()
+            );
+
+            if(userNameExists)
+            {
+                socket.emit("join-success", { success: false, message: "Username already taken in this room" });
+                return;
+            }
 
             // leave previous room (both socket io room and map)
             if(socket.data.currentRoom)
             {
-                const oldRoom = socket.data.currentRoom;  //if user joined another room then current room becomes old room
-                const oldUsers = rooms.get(oldRoom);  // we take the users from oldroom
+                const oldRoomCode = socket.data.currentRoom;  //if user joined another room then current room becomes old room
+                const oldRoomData = rooms.get(oldRoomCode);  // we take the data from oldroom
                 
-                if(oldUsers)
+                if(oldRoomData)
                 {
-                    const updatedUsers = oldUsers.filter((u) => u.socketId !== socket.id) ;
+                    oldRoomData.players = oldRoomData.players.filter(
+                        (u) => u.socketId !== socket.id
+                    )
 
-                    if(updatedUsers.length === 0)
+                    if(oldRoomData.players.length === 0)
                     {
-                        rooms.delete(oldRoom);
+                        rooms.delete(oldRoomCode);
                     } else {
-                        rooms.set(oldRoom , updatedUsers)
+                        //transfer host if host has left
+                        if (oldRoomData.hostSocketId === socket.id) {
+                            oldRoomData.hostSocketId = oldRoomData.players[0]!.socketId;
+                        }
+                        // Notify old room users that player left
+                        socket.to(oldRoomCode).emit("user-left", `${socket.data.username || "A user"} left the room`);
+                        broadcastRoomState(io, oldRoomCode);
                     }
                 }
 
-                socket.leave(oldRoom);                
+                socket.leave(oldRoomCode);                
             }
 
-            //create room if needed
-            if(!rooms.has(room))
-            {
-                socket.emit("join-error", "Room not found");
-                return;
-            }
-
-            const users = rooms.get(room)!  ;
-
-            const userNameExists = users.some(
-                (u) => u.username === user
-            )
-
-            if(userNameExists)
-            {
-                socket.emit("join-error", "UserName already exists inside the room");
-                return;
-            }
-
-            users.push({
-                username: user,
+            //add player to target room
+            targetRoom.players.push({
+                username: sanitizedUsername,
                 socketId: socket.id
-            });
+            })
 
-            socket.join(room);
+            socket.join(roomCode);
 
-            socket.data.currentRoom = room;
-            socket.data.username = user;
+            socket.data.currentRoom = roomCode;
+            socket.data.username = sanitizedUsername;
 
-            //send data to yourself
-            socket.emit("user-joined" , `You joined room: ${room}`);
-            socket.emit("join-success" , {success: true, room: room})
+            //send data to yourself -> Emit success response to the joining client
+            socket.emit("join-success" , {success: true, roomCode})
             //send data to others except yourself
-            socket.to(room).emit("user-joined" , `${user} joined the room`);
+            socket.to(room).emit("user-joined" , `${sanitizedUsername} joined the room`);
             
             broadcastRoomState(io, room);
-         
          });
-        
+
+        //DISCONNECT
         socket.on("disconnect" , () => {
-           const room = socket.data.currentRoom;
+           const roomCode = socket.data.currentRoom;
 
-           if(!room) return;
+           if(!roomCode) return;
 
-           const users = rooms.get(room);
+           const roomData = rooms.get(roomCode);
 
-           if(!users) return;
+           if(!roomData) return;
 
-           const updatedUsers = users.filter(
+           //Filter out the disconnected player from the players array
+           roomData.players = roomData.players.filter(
             (u) => u.socketId !== socket.id
            );
 
-           if(updatedUsers.length === 0)
+           //If no players are left, delete the room
+           if(roomData.players.length === 0)
            {
-            rooms.delete(room);
+            rooms.delete(roomCode);
            } else {
-             rooms.set(room , updatedUsers);
+            // If the host disconnected, pass leadership to the next player in line
+            if(roomData.hostSocketId === socket.id)
+            {
+                roomData.hostSocketId = roomData.players[0]!.socketId;
+            }
+              // Notify remaining users and push updated room state
+           socket.to(roomCode).emit("user-left" , `${socket.data.username || "A user"} left the room`);
+           broadcastRoomState(io , roomCode);
            }
-
-           socket.to(room).emit("user-left" , `${socket.data.username} left the room`)
-           broadcastRoomState(io , room);
 
         });
 
-    })
+      
+
+    });
 }
 
