@@ -299,7 +299,7 @@ export const registerSocketEvents = (io: Server) => {
             console.log(rooms);
            } else {
             // If the host disconnected, pass leadership to the next player in line
-            if(roomData.hostSocketId.toLowerCase() === username.toLowerCase())
+            if(roomData.hostUsername.toLowerCase() === username.toLowerCase())
             {
                 roomData.hostUsername = roomData.players[0]!.username;
                 roomData.hostSocketId = roomData.players[0]!.socketId;

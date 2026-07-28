@@ -141,7 +141,13 @@ const LobbyCard = ({roomCode, roomData} : {roomCode: string , roomData: RoomData
                       onClick={() => handleUpdateRounds(roomData.rounds-1)}
                       >-</button>)}
 
-                        <span className='w-8 text-center tabular-nums animate-bounce'>{roomData.rounds}</span>
+                        <span 
+                            className={`w-8 text-center font-bold tabular-nums transition-all duration-150 ${
+                                isHost ? 'text-lg' : 'text-xl mr-10'
+                            }`}
+                            >
+                            {roomData.rounds}
+                        </span>
 
                     {isHost && 
                         (<button
@@ -174,7 +180,13 @@ const LobbyCard = ({roomCode, roomData} : {roomCode: string , roomData: RoomData
                         onClick={() => handleUpdateGuessTime(roomData.guessTime - 15)}
                         >-</button>   )} 
 
-                     <span className='w-8 text-center tabular-nums animate-bounce'>{roomData.guessTime}</span>
+                     <span 
+                        className={`w-8 text-center font-bold tabular-nums transition-all duration-150 ${
+                            isHost ? 'text-lg' : 'text-xl mr-10'
+                        }`}
+                        >
+                        {roomData.guessTime}
+                    </span>
 
                     { isHost &&
                         (<button
@@ -194,9 +206,31 @@ const LobbyCard = ({roomCode, roomData} : {roomCode: string , roomData: RoomData
             {/* Case parameters end */}
             
             {/* Action Button */}
-            <button className='w-full bg-accent text-paper py-4 font-mono font-bold tracking-widest uppercase text-sm border-2 border-neutral-900 shadow-[3px_3px_0px_0px_rgba(23,23,23,1)] cursor-pointer transition-all duration-150 hover:bg-neutral-900 hover:text-paper hover:shadow-[4px_4px_0px_0px_rgba(178,34,34,1)] hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none'
-            onClick={handleStartGame}
-            >OPEN THE CASE</button>
+
+            { isHost ? 
+            (
+                <button className='w-full bg-accent text-paper py-4 font-mono font-bold tracking-widest uppercase text-sm border-2 border-neutral-900 shadow-[3px_3px_0px_0px_rgba(23,23,23,1)] cursor-pointer transition-all duration-150 hover:bg-neutral-900 hover:text-paper hover:shadow-[4px_4px_0px_0px_rgba(178,34,34,1)] hover:-translate-x-0.5 hover:-translate-y-0.5 active:translate-x-0 active:translate-y-0 active:shadow-none'
+                onClick={handleStartGame}
+                >OPEN THE CASE
+                </button>
+            ) 
+            : (
+                <button 
+                    disabled
+                    className="w-full bg-accent/80 text-paper py-4 px-3 font-mono font-bold tracking-wider uppercase text-xs sm:text-sm 
+                                border-2 border-neutral-900/80 shadow-[3px_3px_0px_0px_rgba(23,23,23,0.9)] 
+                                cursor-not-allowed select-none
+                                flex items-center justify-center gap-1"
+                    >
+                    <span>WAITING FOR LEAD DETECTIVE TO OPEN THE CASE</span>
+                    <span className="inline-flex tracking-tight">
+                        <span className="animate-pulse">.</span>
+                        <span className="animate-pulse [animation-delay:200ms]">.</span>
+                        <span className="animate-pulse [animation-delay:400ms]">.</span>
+                    </span>
+                </button>
+                )
+            }
 
         </section>
         
