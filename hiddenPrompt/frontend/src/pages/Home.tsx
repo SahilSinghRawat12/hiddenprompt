@@ -6,6 +6,7 @@ import UsernameModal from '../components/UsernameModal'
 import { socket } from '../socket/socket'
 import { useNavigate } from 'react-router-dom'
 import JoinRoomModal from '../components/JoinRoomModal'
+import toast from 'react-hot-toast'
 
 
 
@@ -22,11 +23,13 @@ const Home = () => {
       navigate(`/lobby/${roomCode}`)
     }
 
-    const handleRoomJoin = ({ success , roomCode}: {success: boolean , roomCode: string}) => {
-      if(success === true)
+    const handleRoomJoin = ({ success , roomCode , message}: {success: boolean , roomCode?: string, message?:string}) => {
+      if(success && roomCode)
       {
         setShowJoinModal(false);
         navigate(`/lobby/${roomCode}`)
+      } else {
+        toast.error(message || "Failed to Join the Room");
       }
     }
     
@@ -35,12 +38,14 @@ const Home = () => {
 
     return () => {
       socket.off("room-created" , handleRoomCreate);
-      socket.off("user-joined", handleRoomJoin);
+      socket.off("join-success", handleRoomJoin);
     };
 
   } , [navigate])  // runs ONCE when page renders (because navigate never changes -> because it is a stable function)
 
   const handleCreateRoom = (username: string) => {
+    localStorage.setItem("username" , username);
+
      socket.emit("create-room" , {
       username
      });      
@@ -48,6 +53,8 @@ const Home = () => {
 
   const handleJoinRoom = ({roomCode , username}: {roomCode: string , username: string}) =>
   {
+    localStorage.setItem("username" , username);
+
     socket.emit("join-room" , { username , room: roomCode });
   };
 
