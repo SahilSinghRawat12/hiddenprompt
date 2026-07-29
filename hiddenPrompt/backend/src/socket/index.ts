@@ -25,8 +25,41 @@ type Room = {
     hostUsername: string;
     hostSocketId: string;
     players: RoomUser[];
+
     rounds: number;
     guessTime: number;
+
+    gameStarted: boolean;
+    currentRound: number;
+    currentDrawerIndex: number;
+    promptOptions: string[];
+    currentWord: string | null;
+
+}
+
+const words = [
+    "Rocket",
+    "Pizza",
+    "Dog",
+    "Castle",
+    "Laptop",
+    "Tiger",
+    "Dragon",
+    "Guitar"
+];
+
+function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
+    //create new copy to avoid mutating original array
+    const shuffledArray = [...words];
+
+    //fisher yates shuffle algo
+    for(let i=shuffledArray.length-1; i>0; i--)
+    {
+        const j =Math.floor(Math.random() * (i + 1));
+        [shuffledArray[i]! , shuffledArray[j]!] = [shuffledArray[j]! , shuffledArray[i]!];
+    }
+
+    return shuffledArray.slice(0, count);
 }
 
  const rooms = new Map<string , Room>();
@@ -240,7 +273,16 @@ export const registerSocketEvents = (io: Server) => {
              const code = roomCode?.trim().toUpperCase();
              const room = rooms.get(code);
 
-             if(!room) return;
+
+             if (!code) {
+            socket.emit("error-message", "Invalid room code provided.");
+            return;
+            }
+
+             if(!room) {
+                socket.emit("error-message", "Room does not exist");
+                return;
+             }
 
              //verify if the request is actually the host
              if(room.hostSocketId !== socket.id)
@@ -264,6 +306,82 @@ export const registerSocketEvents = (io: Server) => {
             // Broadcast updated state to all connected clients in the room
                 broadcastRoomState(io, code);
             
+         });
+
+         //START GAME
+         socket.on("start-game" , (roomCode: string) => {
+            const code = roomCode?.trim().toUpperCase();
+            const room = rooms.get(code);
+
+            if (!code) {
+            socket.emit("start-game-error", "Invalid room code provided.");
+            return;
+            }
+
+            if(!room) 
+            {
+                socket.emit("start-game-error" , "Room does not exist");
+                return;
+            }
+
+            //check if this scket is actually in the room
+            if(!socket.rooms.has(code))
+            {
+                socket.emit("start-game-error" , "You are not in this room");
+                return;
+            }
+
+            //check if this socket is the host
+            if(socket.id !== room.hostSocketId)
+            {
+                socket.emit("start-game-error" , "You are not the host");
+                return;
+            }
+
+            //player count check
+            if(room.players.length < 2)
+            {
+                socket.emit("start-game-error" , "At least 2 players are required to start.");
+                return;
+            }
+
+            //game status check
+            if(room.gameStarted)
+            {
+                socket.emit("start-game-error" , "Game has already started");
+                return;
+            }
+
+            const prompts = getRandomPrompts(words, 4);
+            room.promptOptions = prompts;
+
+            //start game
+            room.gameStarted = true;
+            room.currentRound = 1;
+            room.currentDrawerIndex = 0;
+
+            const drawer = room.players[room.currentDrawerIndex];
+
+            if(!drawer)
+            {
+                socket.emit("start-game-error", "Drawer not found.");
+                return;
+            }
+            
+            // Emit secret prompt options ONLY to the drawer
+            io.to(drawer?.socketId).emit("prompt-options" , {
+                prompts: room.promptOptions
+            });
+
+            // Broadcast game start to everyone in room
+            io.to(code).emit("game-started" , {
+                round: room.currentRound,
+                drawer: drawer?.username,
+                drawerId: drawer?.socketId,
+                guessTime: room.guessTime
+            });
+
+
          });
 
         //DISCONNECT
