@@ -309,7 +309,7 @@ export const registerSocketEvents = (io: Server) => {
          });
 
          //START GAME
-         socket.on("start-game" , (roomCode: string) => {
+         socket.on("start-game" , ({roomCode}:{roomCode: string}) => {
             const code = roomCode?.trim().toUpperCase();
             const room = rooms.get(code);
 

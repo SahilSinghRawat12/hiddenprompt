@@ -1,13 +1,36 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import toast from 'react-hot-toast';
 import type { RoomData } from '../types/socket';
 import { socket } from '../socket/socket';
+import { useNavigate } from 'react-router-dom';
 
 const LobbyCard = ({roomCode, roomData} : {roomCode: string , roomData: RoomData}) => {
+
+    const navigate = useNavigate();
 
     const [copied , setCopied] = useState(false);
 
         const isHost = socket.id === roomData.hostSocketId;
+
+        useEffect(() => {
+
+            const handleGameStarted = (data: {round:number , drawer:string}) => {
+                navigate(`/game/${roomCode}`);
+            }
+
+            const handleGameError = (errorMsg: string) => {
+                toast.error(errorMsg);
+                };
+
+            socket.on("game-started" , handleGameStarted);
+            socket.on("game-started" , handleGameError);
+
+            return () => {
+                socket.off("game-started", handleGameStarted);
+                socket.off("start-game-error", handleGameError);
+            }
+
+        }, [navigate]);
 
        const getInitials = (name:string) => {
         if (!name) return "";
