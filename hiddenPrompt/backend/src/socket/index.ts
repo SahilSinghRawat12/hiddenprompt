@@ -397,11 +397,11 @@ console.log("Drawer socket:", drawer.socketId);
 
          });
 
-        //  socket.on("get-prompt-options" , (roomCode: string) => {
-        //     const room = rooms.get(roomCode);
-        //     const isDrawer = socket.id === room?.players[room.currentDrawerIndex];
+         socket.on("get-prompt-options" , (roomCode: string) => {
+            const room = rooms.get(roomCode);
+            const isDrawer = socket.id === room?.players[room.currentDrawerIndex];
             
-        // });
+        });
 
         //DISCONNECT
         socket.on("disconnect" , () => {
