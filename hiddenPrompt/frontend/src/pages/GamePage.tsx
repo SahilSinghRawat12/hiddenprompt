@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { socket } from "../socket/socket";
 import type { RoomUser } from "../types/socket";
 
@@ -15,7 +15,11 @@ interface RoomStatePayload {
 
 export const GamePage = () => {
 
-    const { roomCode } = useParams();
+    const { roomCode } = useParams< {roomCode: string }>();
+    const navigate = useNavigate();
+
+    // Retrieve username from sessionStorage/ localstorage (saved during room join/creation)
+    const username = localStorage.getItem("username") || "";
 
     const [headerData , setHeaderData] = useState({
         round:1,
@@ -114,16 +118,22 @@ console.log("Is Drawer?", isDrawer);
     setIsSelectingPrompt(false);
   };
 
+  //Trigger state/prompt fetches ONLY after successful reconnect
+  const handleReconnectSuccess = () => {
+    socket.emit("get-room-state" , roomCode);
+    socket.emit("get-prompt-options" , roomCode);
+  };
+
   //Listeners
   socket.on("game-started" , handleGameStarted);
   socket.on("room-updated" , handleRoomUpdated);
   socket.on("prompt-options" , handlePromptOptions);
   socket.on("round-started" , handleRoundStarted);
+  socket.on("reconnect-success" , handleReconnectSuccess);
   
 
-  //fetch initial room state
-    socket.emit("get-room-state" , roomCode);
-    socket.emit("get-prompt-options", roomCode);
+// Attempt reconnection on mount / refresh
+  socket.emit("reconnect-room", { username, roomCode });
 
 
     return () => {
@@ -131,8 +141,9 @@ console.log("Is Drawer?", isDrawer);
         socket.off("room-updated", handleRoomUpdated);
         socket.off("prompt-options", handlePromptOptions);
         socket.off("round-started", handleRoundStarted);
+        socket.off("reconnect-success", handleReconnectSuccess);
     }
-  }, [roomCode]);
+  }, [roomCode, username , navigate]);
 
 
   return (

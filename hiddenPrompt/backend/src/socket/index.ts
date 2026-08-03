@@ -268,6 +268,8 @@ export const registerSocketEvents = (io: Server) => {
                     socket.data.currentRoom = code;
                     socket.data.username = sanitizedUsername;
 
+            socket.emit("reconnect-success");
+
             // Send immediate update to everyone in room including the reconnected client
                 broadcastRoomState(io, code);
 
@@ -397,9 +399,27 @@ console.log("Drawer socket:", drawer.socketId);
 
          });
 
+         //send prompt again
          socket.on("get-prompt-options" , (roomCode: string) => {
-            const room = rooms.get(roomCode);
-            const isDrawer = socket.id === room?.players[room.currentDrawerIndex];
+            if(!roomCode) return;
+
+            const code = roomCode.trim().toUpperCase();
+            const room = rooms.get(code);
+
+            if(!room || !room.gameStarted) return;
+
+            const currentDrawer = room.players[room.currentDrawerIndex];
+
+            if(currentDrawer?.socketId !== socket.id) return;
+            
+            console.log("Current drawer:", currentDrawer?.socketId);
+            console.log("Request socket:", socket.id);
+
+            // Send back the EXISTING prompts saved in the room
+            if(room.promptOptions && room.promptOptions.length>0)
+            {
+                socket.emit("prompt-options" , { prompts: room.promptOptions });
+            }
             
         });
 
@@ -416,30 +436,44 @@ console.log("Drawer socket:", drawer.socketId);
 
            setTimeout(() => {
 
-            // Check if the player reconnected during those 2 seconds
-            const playerReconnected = roomData.players.some(
-                (p) => p.username.toLowerCase() === username.toLowerCase() && p.socketId !== socket.id
-            )
+            // Fetch the freshest room state from the Map inside the timeout
+            const room = rooms.get(roomCode);
 
-            if (playerReconnected) return; // Player reconnected cleanly! Do nothing.
+            if(!room) return;
 
-            //Filter out the disconnected player from the players array
-           roomData.players = roomData.players.filter(
-            (u) => u.socketId !== socket.id
+           // Find this specific player in the room list
+           const player = room.players.find(
+            (p) => p.username.toLowerCase() === username.toLowerCase()
            );
 
-           //If no players are left, delete the room
-           if(roomData.players.length === 0)
+           // If the player is no longer in the room, stop here
+             if (!player) return;
+
+            // Check if the player reconnected during the 2-second period
+
+            // If their room entry now has a NEW socket.id, they reconnected! -> Player has a different socket now
+           if(player.socketId !== socket.id)
+           {
+            return;
+           }
+
+           // If socket IDs match, they didn't reconnect — remove them from the player list
+           room.players = room.players.filter(
+            (p) => p.socketId !== socket.id
+           );
+
+           //If no players are left, delete the empty room
+           if(room.players.length === 0)
            {
             rooms.delete(roomCode);
-            console.log("Deleted room:", roomCode);
+            console.log("Deleted empty room:", roomCode);
             console.log(rooms);
            } else {
             // If the host disconnected, pass leadership to the next player in line
             if(roomData.hostUsername.toLowerCase() === username.toLowerCase())
             {
-                roomData.hostUsername = roomData.players[0]!.username;
-                roomData.hostSocketId = roomData.players[0]!.socketId;
+                room.hostUsername = room.players[0]!.username;
+                room.hostSocketId = room.players[0]!.socketId;
             }
               // Notify remaining users and push updated room state
            socket.to(roomCode).emit("user-left" , `${username || "A user"} left the room`);
