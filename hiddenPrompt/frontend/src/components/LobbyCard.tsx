@@ -23,7 +23,7 @@ const LobbyCard = ({roomCode, roomData} : {roomCode: string , roomData: RoomData
                 };
 
             socket.on("game-started" , handleGameStarted);
-            socket.on("game-started" , handleGameError);
+            socket.on("start-game-error" , handleGameError);
 
             return () => {
                 socket.off("game-started", handleGameStarted);

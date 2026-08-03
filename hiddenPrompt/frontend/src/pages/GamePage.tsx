@@ -3,6 +3,15 @@ import { useParams } from "react-router-dom";
 import { socket } from "../socket/socket";
 import type { RoomUser } from "../types/socket";
 
+// Type definition for room-updated payload
+interface RoomStatePayload {
+  roomCode: string;
+  players: RoomUser[];
+  hostSocketId: string;
+  drawerSocketId?: string;
+  rounds: number;
+  guessTime: number;
+}
 
 export const GamePage = () => {
 
@@ -15,6 +24,21 @@ export const GamePage = () => {
     });
 
     const [players , setPlayers] = useState<RoomUser[]>([]);
+    const [ prompts , setPrompts ] = useState<string[]>([]);
+    const [ drawerSocketId , setDrawerSocketId ] = useState<string>("");
+    const [isSelectingPrompt, setIsSelectingPrompt] = useState(false);
+
+    const [chatInput, setChatInput] = useState("");
+
+    const [chatMessages, setChatMessages] = useState<
+    { sender?: string; text: string; isSystem?: boolean }[] >([]);
+
+    const isDrawer = Boolean(socket.id && socket.id === drawerSocketId);
+
+    console.log("My Socket ID:", socket.id);
+console.log("Server Drawer Socket ID:", drawerSocketId);
+console.log("prompts:", prompts);
+console.log("Is Drawer?", isDrawer);
 
     const totalRounds = 6;
   
@@ -29,9 +53,29 @@ export const GamePage = () => {
       .toUpperCase();
   };
 
+  const handleSelectPrompt = (selectedPrompt: string) => {
+    socket.emit("select-prompt" , {
+      roomCode,
+      prompt: selectedPrompt
+    });
+
+    setPrompts([]);
+    setIsSelectingPrompt(false);
+
+  }
+
+  const handleSendChat = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+    setChatInput("");
+  };
+
   useEffect(() => {
 
-    socket.on("game-started" , (data: {
+    if(!roomCode) return;
+
+    //Handlers
+    const handleGameStarted = (data: {
         round: number, drawer:string, drawerId:string, guessTime:number
     }) => {
         setHeaderData((prev) => ({
@@ -40,16 +84,55 @@ export const GamePage = () => {
             drawerUsername: data.drawer,
             timer: data.guessTime
         }));
-    });
 
-    socket.on("room-updated" , (data: { players: RoomUser}) => {
-      
-    })
+        setDrawerSocketId(data.drawerId);
+        setIsSelectingPrompt(true);
+    };
+
+    const handleRoomUpdated = (data: RoomStatePayload) => {
+      //data -> Checks if data is not null or undefined
+      //Array.isArray -> Checks if data.players actually exists and is an Array
+    if (data && Array.isArray(data.players)) {
+        setPlayers(data.players);
+      }
+
+    if(data?.drawerSocketId)
+    {
+      setDrawerSocketId(data.drawerSocketId);
+    }
+  };
+
+  const handlePromptOptions = (data: { prompts: string[] }) => {
+    console.log("Received prompt options on client:", data?.prompts);
+    if (data?.prompts && Array.isArray(data.prompts)) {
+        setPrompts(data.prompts);
+        setIsSelectingPrompt(true);
+      }
+  };
+
+  const handleRoundStarted = () => {
+    setIsSelectingPrompt(false);
+  };
+
+  //Listeners
+  socket.on("game-started" , handleGameStarted);
+  socket.on("room-updated" , handleRoomUpdated);
+  socket.on("prompt-options" , handlePromptOptions);
+  socket.on("round-started" , handleRoundStarted);
+  
+
+  //fetch initial room state
+    socket.emit("get-room-state" , roomCode);
+    socket.emit("get-prompt-options", roomCode);
+
 
     return () => {
-        socket.off("game-started");
+        socket.off("game-started", handleGameStarted);
+        socket.off("room-updated", handleRoomUpdated);
+        socket.off("prompt-options", handlePromptOptions);
+        socket.off("round-started", handleRoundStarted);
     }
-  }, []);
+  }, [roomCode]);
 
 
   return (
@@ -127,7 +210,7 @@ export const GamePage = () => {
                       {prompts.map((prompt) => (
                         <button
                           key={prompt}
-                          onClick={() => onSelectPrompt && onSelectPrompt(prompt)}
+                          onClick={() => handleSelectPrompt(prompt)}
                           className="border-2 border-[#171717] bg-[#e9dfc4] py-3 px-4 font-bold text-sm tracking-wider uppercase cursor-pointer shadow-[2px_2px_0px_0px_rgba(23,23,23,1)] transition-all hover:bg-[#171717] hover:text-[#e9dfc4] hover:-translate-y-0.5 active:translate-y-0 active:shadow-none"
                         >
                           {prompt}
@@ -139,10 +222,10 @@ export const GamePage = () => {
               )}
 
               {/* WAITING OVERLAY (Shown to Guessers) */}
-              {!isDrawer && prompts.length > 0 && (
+              {!isDrawer && isSelectingPrompt && (
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-[#171717] text-[#e9dfc4] border border-[#171717] px-4 py-2 font-mono text-xs uppercase tracking-wider shadow-[3px_3px_0px_0px_rgba(178,34,34,1)] flex items-center gap-2">
                   <span className="w-2 h-2 bg-[#b22222] animate-ping rounded-full" />
-                  WAITING FOR <span className="text-[#f0ece1] font-bold">{drawerUsername}</span> TO SELECT A CASE PROMPT...
+                  WAITING FOR <span className="text-[#f0ece1] font-bold">{headerData.drawerUsername}</span> TO SELECT A CASE PROMPT...
                 </div>
               )}
             </div>
@@ -165,7 +248,7 @@ export const GamePage = () => {
               <div className="overflow-y-auto space-y-2 pr-1 font-mono flex-1">
                 {players.map((player) => {
                   const isCurrentDrawer = player.socketId === drawerSocketId;
-                  const isYou = player.socketId === currentSocketId;
+                  const isYou = player.socketId === socket.id;
 
                   return (
                     <div
@@ -207,9 +290,9 @@ export const GamePage = () => {
                       </div>
 
                       {/* Right Group: Score */}
-                      <span className="font-bold border border-[#171717] px-2 py-0.5 bg-[#e9dfc4] text-[11px] text-[#171717] tabular-nums shrink-0 shadow-[1px_1px_0px_0px_rgba(23,23,23,1)]">
+                      {/* <span className="font-bold border border-[#171717] px-2 py-0.5 bg-[#e9dfc4] text-[11px] text-[#171717] tabular-nums shrink-0 shadow-[1px_1px_0px_0px_rgba(23,23,23,1)]">
                         {player.score} PTS
-                      </span>
+                      </span> */}
                     </div>
                   );
                 })}

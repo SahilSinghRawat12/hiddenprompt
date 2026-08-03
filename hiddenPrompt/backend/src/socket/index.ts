@@ -12,7 +12,8 @@ export const broadcastRoomState = (io: Server , roomCode: string)=>
         players: room.players,
         hostSocketId: room.hostSocketId,
         rounds: room.rounds,
-        guessTime: room.guessTime
+        guessTime: room.guessTime,
+        drawerSocketId: room.players[room.currentDrawerIndex]?.socketId || ""
     });
 }
 
@@ -37,7 +38,7 @@ type Room = {
 
 }
 
-const words = [
+const words  = [
     "Rocket",
     "Pizza",
     "Dog",
@@ -50,7 +51,7 @@ const words = [
 
 function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
     //create new copy to avoid mutating original array
-    const shuffledArray = [...words];
+    const shuffledArray = [...wordPool];
 
     //fisher yates shuffle algo
     for(let i=shuffledArray.length-1; i>0; i--)
@@ -99,7 +100,12 @@ export const registerSocketEvents = (io: Server) => {
                     }
                 ],
                 rounds: 3,
-                guessTime: 60
+                guessTime: 60,
+                gameStarted: false,
+                currentRound: 0,
+                currentDrawerIndex: 0,
+                promptOptions: [],
+                currentWord: null
             });
             
             // join socket room and notify client
@@ -367,12 +373,12 @@ export const registerSocketEvents = (io: Server) => {
                 socket.emit("start-game-error", "Drawer not found.");
                 return;
             }
-            
-            // Emit secret prompt options ONLY to the drawer
-            io.to(drawer?.socketId).emit("prompt-options" , {
-                prompts: room.promptOptions
-            });
 
+            if (!drawer || !drawer.socketId) {
+            console.error("No valid drawer found for room:", code);
+            return;
+             }
+            
             // Broadcast game start to everyone in room
             io.to(code).emit("game-started" , {
                 round: room.currentRound,
@@ -381,8 +387,21 @@ export const registerSocketEvents = (io: Server) => {
                 guessTime: room.guessTime
             });
 
+            room.promptOptions = prompts;
+            console.log("Sending prompts:", room.promptOptions);
+console.log("Drawer socket:", drawer.socketId);
+             // Emit secret prompt options ONLY to the drawer
+            io.to(drawer?.socketId).emit("prompt-options" , {
+                prompts: room.promptOptions
+            });
 
          });
+
+         socket.on("get-prompt-options" , (roomCode: string) => {
+            const room = rooms.get(roomCode);
+            const isDrawer = socket.id === room?.players[room.currentDrawerIndex];
+            
+        });
 
         //DISCONNECT
         socket.on("disconnect" , () => {
