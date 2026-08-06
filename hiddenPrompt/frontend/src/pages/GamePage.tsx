@@ -9,6 +9,7 @@ interface RoomStatePayload {
   players: RoomUser[];
   hostSocketId: string;
   drawerSocketId?: string;
+  drawerUsername?: string;
   rounds: number;
   guessTime: number;
 }
@@ -24,8 +25,13 @@ export const GamePage = () => {
     const [headerData , setHeaderData] = useState({
         round:1,
         timer:15,
-        drawerUsername:"",
+        drawerUsername:""
     });
+
+    const [totalRounds , setTotalRounds ] = useState<number>(0);
+
+    const [currentWord , setCurrentWord] = useState<string>("");
+    const [wordLength , setWordLength] = useState<number>(0);
 
     const [players , setPlayers] = useState<RoomUser[]>([]);
     const [ prompts , setPrompts ] = useState<string[]>([]);
@@ -44,7 +50,6 @@ console.log("Server Drawer Socket ID:", drawerSocketId);
 console.log("prompts:", prompts);
 console.log("Is Drawer?", isDrawer);
 
-    const totalRounds = 6;
   
   const getInitials = (name: string) => {
     if (!name) return "";
@@ -60,10 +65,9 @@ console.log("Is Drawer?", isDrawer);
   const handleSelectPrompt = (selectedPrompt: string) => {
     socket.emit("select-prompt" , {
       roomCode,
-      prompt: selectedPrompt
+      selectedPrompt
     });
 
-    setPrompts([]);
     setIsSelectingPrompt(false);
 
   }
@@ -80,7 +84,7 @@ console.log("Is Drawer?", isDrawer);
 
     //Handlers
     const handleGameStarted = (data: {
-        round: number, drawer:string, drawerId:string, guessTime:number
+        round: number, drawer:string, drawerId:string, guessTime:number,totalRounds:number
     }) => {
         setHeaderData((prev) => ({
             ...prev,
@@ -88,6 +92,11 @@ console.log("Is Drawer?", isDrawer);
             drawerUsername: data.drawer,
             timer: data.guessTime
         }));
+        
+        if(totalRounds !== undefined)
+        {
+          setTotalRounds(data.totalRounds);
+        }
 
         setDrawerSocketId(data.drawerId);
         setIsSelectingPrompt(true);
@@ -100,9 +109,22 @@ console.log("Is Drawer?", isDrawer);
         setPlayers(data.players);
       }
 
+      // Update totalRounds state from server
+        if (data?.rounds !== undefined) {
+          setTotalRounds(data.rounds);
+        }
+
     if(data?.drawerSocketId)
     {
       setDrawerSocketId(data.drawerSocketId);
+    }
+
+    if(data?.drawerUsername)
+    {
+      setHeaderData((prev) => ({
+        ...prev,
+        drawerUsername: data.drawerUsername!
+      }));
     }
   };
 
@@ -114,8 +136,16 @@ console.log("Is Drawer?", isDrawer);
       }
   };
 
-  const handleRoundStarted = ({wordLength , guessTime}: {wordLength:number , guessTime:number}) => {
-    
+  const handleRoundStarted = ({word , wordLength , guessTime}: {word: string , wordLength:number , guessTime:number}) => {
+    setHeaderData((prev) => ({
+      ...prev,
+      timer: guessTime
+    }));
+
+    setCurrentWord(word);
+    setWordLength(wordLength);
+
+    setPrompts([]);
     setIsSelectingPrompt(false);
   };
 
@@ -161,7 +191,7 @@ console.log("Is Drawer?", isDrawer);
           <div className="flex flex-wrap items-center gap-3">
             {/* Round Badge */}
             <div className="border border-[#171717] px-2.5 py-1 font-mono text-xs tracking-wider uppercase bg-[#e9dfc4]">
-              ROUND <strong className="text-base text-[#b22222]">{headerData.round}</strong> / {totalRounds}
+              ROUND <strong className="text-base text-[#b22222]">{headerData.round}</strong> / {totalRounds || 3}
             </div>
 
             {/* Timer Badge */}
@@ -173,6 +203,7 @@ console.log("Is Drawer?", isDrawer);
             <div className="border border-[#171717] px-2.5 py-1 font-mono text-xs tracking-wider uppercase bg-[#171717] text-[#e9dfc4]">
               CASE NO: <strong className="text-[#e9dfc4]">{roomCode}</strong>
             </div>
+
           </div>
 
           {/* Current Drawer Banner */}

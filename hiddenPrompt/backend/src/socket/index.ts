@@ -7,13 +7,16 @@ export const broadcastRoomState = (io: Server , roomCode: string)=>
 
     if(!room) return;
 
+    const currentDrawer = room.players[room.currentDrawerIndex];
+
     io.to(roomCode).emit( "room-updated", {
         roomCode,
         players: room.players,
         hostSocketId: room.hostSocketId,
         rounds: room.settings.maxRounds,
         guessTime: room.settings.guessTime,
-        drawerSocketId: room.players[room.currentDrawerIndex]?.socketId || ""
+        drawerSocketId: currentDrawer?.socketId || "",
+        drawerUsername: currentDrawer?.username || ""
     });
 }
 
@@ -389,6 +392,7 @@ export const registerSocketEvents = (io: Server) => {
             // Broadcast game start to everyone in room
             io.to(code).emit("game-started" , {
                 round: room.currentRound,
+                totalRound: room.settings.maxRounds,
                 drawer: drawer?.username,
                 drawerId: drawer?.socketId,
                 guessTime: room.settings.guessTime
