@@ -114,7 +114,8 @@ console.log("Is Drawer?", isDrawer);
       }
   };
 
-  const handleRoundStarted = () => {
+  const handleRoundStarted = ({wordLength , guessTime}: {wordLength:number , guessTime:number}) => {
+    
     setIsSelectingPrompt(false);
   };
 

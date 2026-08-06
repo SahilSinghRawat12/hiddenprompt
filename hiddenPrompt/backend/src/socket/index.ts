@@ -11,8 +11,8 @@ export const broadcastRoomState = (io: Server , roomCode: string)=>
         roomCode,
         players: room.players,
         hostSocketId: room.hostSocketId,
-        rounds: room.rounds,
-        guessTime: room.guessTime,
+        rounds: room.settings.maxRounds,
+        guessTime: room.settings.guessTime,
         drawerSocketId: room.players[room.currentDrawerIndex]?.socketId || ""
     });
 }
@@ -27,8 +27,11 @@ type Room = {
     hostSocketId: string;
     players: RoomUser[];
 
-    rounds: number;
-    guessTime: number;
+    settings: {
+        maxRounds: number;
+        guessTime: number;
+    }
+    
 
     gameStarted: boolean;
     currentRound: number;
@@ -99,8 +102,10 @@ export const registerSocketEvents = (io: Server) => {
                         socketId: socket.id
                     }
                 ],
-                rounds: 3,
-                guessTime: 60,
+                settings: {
+                    maxRounds: 3,
+                    guessTime: 60,
+                },                
                 gameStarted: false,
                 currentRound: 0,
                 currentDrawerIndex: 0,
@@ -303,12 +308,12 @@ export const registerSocketEvents = (io: Server) => {
              if( rounds!=undefined )
              {
                 //kepp rounds between 1 to 6
-                room.rounds = Math.max(1, Math.min(6, rounds));
+                room.settings.maxRounds = Math.max(1, Math.min(6, rounds));
              }
 
              if (guessTime !== undefined) {
                 // Keeps guess time between 15 and 120 seconds
-                room.guessTime = Math.max(15, Math.min(120, guessTime));
+                room.settings.guessTime = Math.max(15, Math.min(120, guessTime));
             }
 
             // Broadcast updated state to all connected clients in the room
@@ -386,10 +391,9 @@ export const registerSocketEvents = (io: Server) => {
                 round: room.currentRound,
                 drawer: drawer?.username,
                 drawerId: drawer?.socketId,
-                guessTime: room.guessTime
+                guessTime: room.settings.guessTime
             });
 
-            room.promptOptions = prompts;
             console.log("Sending prompts:", room.promptOptions);
 console.log("Drawer socket:", drawer.socketId);
              // Emit secret prompt options ONLY to the drawer
@@ -421,6 +425,44 @@ console.log("Drawer socket:", drawer.socketId);
                 socket.emit("prompt-options" , { prompts: room.promptOptions });
             }
             
+        });
+
+        //SELECT PROMPT
+        socket.on("select-prompt" , ( {roomCode , selectedPrompt} : {roomCode:string , selectedPrompt:string} ) => {
+
+            if(!roomCode || !selectedPrompt) return;
+             const code = roomCode.trim().toUpperCase();
+
+             const room = rooms.get(code);
+            if(!room || !room.gameStarted) return;
+
+            //prevent double selection
+            if(room.currentWord) return; // Word has already been selected for this round
+
+            const currentDrawer = room.players[room.currentDrawerIndex]?.socketId;
+
+            if(currentDrawer !== socket.id) return;
+
+            // check if the prompt is actually in the offered list
+            const isValidPrompt = room.promptOptions?.includes(selectedPrompt);
+            if(!isValidPrompt) return;
+
+            //All validation passed: Now apply state , updates and broadcast
+            room.currentWord = selectedPrompt;
+            room.promptOptions = [];  // clear options after choice
+
+            // Notify drawer with full word
+            socket.emit("round-started" , {
+                word: room.currentWord,
+                guessTime: room.settings.guessTime
+            });
+
+            // Notify guessers with word structure (e.g. length) instead of the actual word
+            socket.to(code).emit("round-started" , {
+                wordLength: room.currentWord.length,
+                guessTime: room.settings.guessTime
+            });
+ 
         });
 
         //DISCONNECT
@@ -470,7 +512,7 @@ console.log("Drawer socket:", drawer.socketId);
             console.log(rooms);
            } else {
             // If the host disconnected, pass leadership to the next player in line
-            if(roomData.hostUsername.toLowerCase() === username.toLowerCase())
+            if(room.hostUsername.toLowerCase() === username.toLowerCase())
             {
                 room.hostUsername = room.players[0]!.username;
                 room.hostSocketId = room.players[0]!.socketId;
