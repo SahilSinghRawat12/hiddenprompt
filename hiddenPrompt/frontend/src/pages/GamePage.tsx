@@ -93,7 +93,7 @@ console.log("Is Drawer?", isDrawer);
             timer: data.guessTime
         }));
         
-        if(totalRounds !== undefined)
+        if(data.totalRounds !== undefined)
         {
           setTotalRounds(data.totalRounds);
         }
@@ -136,14 +136,30 @@ console.log("Is Drawer?", isDrawer);
       }
   };
 
-  const handleRoundStarted = ({word , wordLength , guessTime}: {word: string , wordLength:number , guessTime:number}) => {
+  const handleRoundStarted = (data: {word?: string , wordLength?:number , guessTime:number , drawerId?: string}) => {
     setHeaderData((prev) => ({
       ...prev,
-      timer: guessTime
+      timer: data.guessTime
     }));
 
-    setCurrentWord(word);
-    setWordLength(wordLength);
+    // Primary check (data.drawerId exists): Checks directly against the drawerId sent fresh inside the event payload from the server.
+    // Fallback check (data.drawerId is missing): Falls back to comparing against drawerSocketId stored in React state.
+   
+    if (data.drawerId) {
+      setDrawerSocketId(data.drawerId);
+    }
+    
+    const amIDrawer = Boolean(socket.id && (data.drawerId ? socket.id === data.drawerId : socket.id === drawerSocketId));
+
+    if(amIDrawer && data.word)
+    {
+      setCurrentWord(data.word);
+    }
+    
+    if(data.wordLength)
+    {
+      setWordLength(data.wordLength);
+    }
 
     setPrompts([]);
     setIsSelectingPrompt(false);
@@ -153,6 +169,36 @@ console.log("Is Drawer?", isDrawer);
   const handleReconnectSuccess = () => {
     socket.emit("get-room-state" , roomCode);
     socket.emit("get-prompt-options" , roomCode);
+    socket.emit("get-current-game-state" , roomCode);
+  };
+
+  const handleCurrentGameState = (data: {
+    word?: string;
+    wordLength?: number;
+    guessTime: number;
+    drawerId?: string;
+  }) => {
+
+    setHeaderData((prev) => ({
+      ...prev ,
+      timer: data.guessTime,
+    }));
+
+    if(data.drawerId)
+    {
+      setDrawerSocketId(data.drawerId);
+    }
+
+    if(data.word)
+    {
+      setCurrentWord(data.word);
+    }
+
+    if(data.wordLength)
+    {
+      setWordLength(data.wordLength);
+    }
+
   };
 
   //Listeners
@@ -161,10 +207,12 @@ console.log("Is Drawer?", isDrawer);
   socket.on("prompt-options" , handlePromptOptions);
   socket.on("round-started" , handleRoundStarted);
   socket.on("reconnect-success" , handleReconnectSuccess);
+   socket.on("current-game-state" , handleCurrentGameState); 
   
 
 // Attempt reconnection on mount / refresh
   socket.emit("reconnect-room", { username, roomCode });
+ 
 
 
     return () => {
@@ -173,8 +221,9 @@ console.log("Is Drawer?", isDrawer);
         socket.off("prompt-options", handlePromptOptions);
         socket.off("round-started", handleRoundStarted);
         socket.off("reconnect-success", handleReconnectSuccess);
+        socket.off("current-game-state" , handleCurrentGameState); 
     }
-  }, [roomCode, username , navigate]);
+  }, [roomCode, username]);
 
 
   return (
@@ -203,6 +252,31 @@ console.log("Is Drawer?", isDrawer);
             <div className="border border-[#171717] px-2.5 py-1 font-mono text-xs tracking-wider uppercase bg-[#171717] text-[#e9dfc4]">
               CASE NO: <strong className="text-[#e9dfc4]">{roomCode}</strong>
             </div>
+
+              {/* Showing the word in the drawer sreen */}
+            {
+              isDrawer && currentWord.length > 0 && (
+                <div className="border border-[#171717] px-2.5 py-1 font-mono text-xs tracking-wider uppercase bg-[#e9dfc4]">
+                 WORD SELECTED: <strong className="text-base text-[#171717]">{currentWord}</strong>
+            </div>
+              ) 
+            }
+
+            {
+               !isDrawer && wordLength>0 && (
+                <div className="flex gap-2 justify-center my-4 font-mono text-xl font-bold">
+                    {
+                      Array.from({ length: wordLength }).map((_ , index) => (
+                        <span key={index} className="border-b-2 border-[#171717] w-6 text-center">
+                          _
+                        </span>
+                      ))
+                    }
+                </div>
+               )
+            }
+
+           
 
           </div>
 

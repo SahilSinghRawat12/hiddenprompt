@@ -455,19 +455,52 @@ console.log("Drawer socket:", drawer.socketId);
             room.currentWord = selectedPrompt;
             room.promptOptions = [];  // clear options after choice
 
+            const drawerSocketId = room.players[room.currentDrawerIndex]?.socketId;
+
+            if(!drawerSocketId) return;
             // Notify drawer with full word
-            socket.emit("round-started" , {
+            io.to(drawerSocketId).emit("round-started" , {
                 word: room.currentWord,
-                guessTime: room.settings.guessTime
+                guessTime: room.settings.guessTime,
+                drawerId: drawerSocketId
             });
 
-            // Notify guessers with word structure (e.g. length) instead of the actual word
-            socket.to(code).emit("round-started" , {
+            // Notify guessers with word structure (e.g. length) (excluding drawer) instead of the actual word
+            io.to(code).except(drawerSocketId).emit("round-started" , {
                 wordLength: room.currentWord.length,
-                guessTime: room.settings.guessTime
+                guessTime: room.settings.guessTime,
+                drawerId: drawerSocketId,
             });
  
         });
+
+        socket.on("get-current-game-state" , (roomCode: string) => {
+            if(!roomCode) return;
+
+            const code = roomCode.trim().toUpperCase();
+            const room = rooms.get(code);
+
+            if(!room || !room.gameStarted) return;
+
+            const currentDrawer = room.players[room.currentDrawerIndex];
+            const isDrawer = currentDrawer?.socketId === socket.id;
+
+            if(isDrawer) {
+                 socket.emit("current-game-state", {
+                word: room.currentWord,
+                guessTime: room.settings.guessTime,
+                drawerId: currentDrawer?.socketId
+                });
+            } else 
+            {
+                 socket.emit("current-game-state", {
+                wordLength: room.currentWord?.length,
+                guessTime: room.settings.guessTime,
+                drawerId: currentDrawer?.socketId
+                });
+            }
+
+        } );
 
         //DISCONNECT
         socket.on("disconnect" , () => {
