@@ -19,5 +19,6 @@ export type Room = {
     currentDrawerIndex: number;
     promptOptions: string[];
     currentWord: string | null;
+    currentImageUrl: string | null;
 
 }

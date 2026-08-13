@@ -1,8 +1,11 @@
+import dotenv from "dotenv";
+
+dotenv.config();
+
 import http from "http";
 import { Server } from "socket.io";
-import app from "./app.ts";
-import { registerSocketEvents } from "./socket/index.ts";
-
+import app from "./app.js";
+import { registerSocketEvents } from "./socket/index.js";
 
 const PORT = 5000;
 

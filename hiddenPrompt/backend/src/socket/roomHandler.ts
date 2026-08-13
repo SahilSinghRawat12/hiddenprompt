@@ -5,7 +5,7 @@ import { generateRoomCode } from "../utils/generateRoomCode.js";
        
 
     export const registerRoomHandler = (io: Server , socket: Socket) => {
-        
+
         //create room
         socket.on("create-room" , ({username} : {username: string}) => {
 
@@ -43,7 +43,8 @@ import { generateRoomCode } from "../utils/generateRoomCode.js";
                 currentRound: 0,
                 currentDrawerIndex: 0,
                 promptOptions: [],
-                currentWord: null
+                currentWord: null,
+                currentImageUrl: null
             });
             
             // join socket room and notify client
