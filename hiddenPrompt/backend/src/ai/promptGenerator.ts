@@ -1,7 +1,10 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-export async function testAi() {
+
+const usedPrompts: string[] = [];
+
+export async function promptGeneratorAi() {
     const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
     const apiToken = process.env.CLOUDFLARE_API_TOKEN;
 
@@ -28,12 +31,15 @@ export async function testAi() {
                         content: `Generate exactly 4 short prompts (1-3 words each) for a picture guessing game.
                         Use different categories: animals, objects, food, places, activities.
                         Nothing abstract. No repeats.
+
+                        ${usedPrompts.length > 0 ? `IMPORTANT: Do NOT use any of these words that were already used: [${usedPrompts.join(', ')}]` : ''}
+
                         Output ONLY this format, nothing else:
                         ["Word", "Word", "Word", "Word"]`
                     }
                 ],
                 max_tokens: 60,
-                temperature: 0.7
+                temperature: 0.9
             })
         }
     );
@@ -65,6 +71,19 @@ export async function testAi() {
             throw new Error("AI did not return exactly 4 prompts");
         }
 
+        // Check for duplicates against history
+        const hasDuplicates = parsedPrompts.some(p => usedPrompts.includes(p.toLowerCase()));
+
+        if(hasDuplicates)
+        {
+            throw new Error("AI returned already-used prompts, retrying...");
+        }
+
+        // Add to history
+        usedPrompts.push(...parsedPrompts.map(p => p.toLowerCase()));
+        console.log("Used so far:", usedPrompts);
+
+
         console.log("Parsed Prompts:", parsedPrompts);
         return parsedPrompts;
 
@@ -75,4 +94,4 @@ export async function testAi() {
     }
 }
 
-testAi();
+promptGeneratorAi();
