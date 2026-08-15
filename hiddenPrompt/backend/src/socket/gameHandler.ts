@@ -1,6 +1,7 @@
 import type { Server, Socket } from "socket.io";
 import { rooms } from "../state/rooms.js";
 import { broadcastRoomState } from "../utils/broadcastRoomState.js";
+import { generateImage } from "../ai/imageGenerator.js";
 
 
 
@@ -141,7 +142,7 @@ console.log("Drawer socket:", drawer.socketId);
         });
 
         //SELECT PROMPT
-        socket.on("select-prompt" , ( {roomCode , selectedPrompt} : {roomCode:string , selectedPrompt:string} ) => {
+        socket.on("select-prompt" , async ( {roomCode , selectedPrompt} : {roomCode:string , selectedPrompt:string} ) => {
 
             if(!roomCode || !selectedPrompt) return;
              const code = roomCode.trim().toUpperCase();
@@ -164,12 +165,20 @@ console.log("Drawer socket:", drawer.socketId);
             room.currentWord = selectedPrompt;
             room.promptOptions = [];  // clear options after choice
 
+            //Generate image
+            const image = await generateImage(selectedPrompt);
+            const imageData = `data:image/png;base64,${image.toString("base64")}`;
+
+            room.currentImageUrl = imageData;
+
+
             const drawerSocketId = room.players[room.currentDrawerIndex]?.socketId;
 
             if(!drawerSocketId) return;
             // Notify drawer with full word
             io.to(drawerSocketId).emit("round-started" , {
                 word: room.currentWord,
+                image: imageData,
                 guessTime: room.settings.guessTime,
                 drawerId: drawerSocketId
             });
@@ -177,12 +186,14 @@ console.log("Drawer socket:", drawer.socketId);
             // Notify guessers with word structure (e.g. length) (excluding drawer) instead of the actual word
             io.to(code).except(drawerSocketId).emit("round-started" , {
                 wordLength: room.currentWord.length,
+                image: imageData,
                 guessTime: room.settings.guessTime,
                 drawerId: drawerSocketId,
             });
  
         });
 
+        //CURRENT GAME STATE
         socket.on("get-current-game-state" , (roomCode: string) => {
             if(!roomCode) return;
 
