@@ -223,8 +223,12 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
                   {
                     socket.emit("current-game-state", {
                         phase: "prompt-selection",
-                        prompts: room.promptOptions,
+                        round: room.currentRound,
+                        totalRounds: room.settings.maxRounds,
                         drawerId: currentDrawer?.socketId,
+                        drawerUsername: currentDrawer?.username,
+                        guessTime: room.settings.guessTime,
+                        prompts: isDrawer ? room.promptOptions : []
                     });
                   }else {
                                 // Guesser waiting for drawer to pick

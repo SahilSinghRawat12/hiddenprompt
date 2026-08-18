@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { socket } from "../socket/socket";
 import type { RoomUser } from "../types/socket";
@@ -15,45 +15,45 @@ interface RoomStatePayload {
 }
 
 export const GamePage = () => {
+  const { roomCode } = useParams<{ roomCode: string }>();
+  const navigate = useNavigate();
 
-    const { roomCode } = useParams< {roomCode: string }>();
-    const navigate = useNavigate();
+  // Retrieve username from localStorage (saved during room join/creation)
+  const username = localStorage.getItem("username") || "";
 
-    // Retrieve username from sessionStorage/ localstorage (saved during room join/creation)
-    const username = localStorage.getItem("username") || "";
+  const [headerData, setHeaderData] = useState({
+    round: 1,
+    timer: 15,
+    drawerUsername: ""
+  });
 
-    const [headerData , setHeaderData] = useState({
-        round:1,
-        timer:15,
-        drawerUsername:""
-    });
+  const [totalRounds, setTotalRounds] = useState<number>(0);
+  const [gamePhase, setGamePhase] = useState<"prompt-selection" | "round" | null>(null);
+  const [currentImage, setCurrentImage] = useState("");
+  const [currentWord, setCurrentWord] = useState<string>("");
+  const [wordLength, setWordLength] = useState<number>(0);
 
-    const [totalRounds , setTotalRounds ] = useState<number>(0);
-    const [gamePhase , setGamePhase] = useState<"prompt-selection" | "round" | null>(null);
-    const [currentImage, setCurrentImage] = useState("");
-    const [currentWord , setCurrentWord] = useState<string>("");
-    const [wordLength , setWordLength] = useState<number>(0);
+  // State for Round Start Intro Banner
+  const [showRoundBanner, setShowRoundBanner] = useState(false);
+  const showRoundBannerRef = useRef(false);
 
-    const [players , setPlayers] = useState<RoomUser[]>([]);
-    const [ prompts , setPrompts ] = useState<string[]>([]);
-    const [ drawerSocketId , setDrawerSocketId ] = useState<string>("");
-    const [isSelectingPrompt, setIsSelectingPrompt] = useState(false);
+  const updateShowRoundBanner = (value: boolean) => {
+  showRoundBannerRef.current = value;
+  setShowRoundBanner(value);
+  };
 
-    
+  const [players, setPlayers] = useState<RoomUser[]>([]);
+  const [prompts, setPrompts] = useState<string[]>([]);
+  const [drawerSocketId, setDrawerSocketId] = useState<string>("");
+  const [isSelectingPrompt, setIsSelectingPrompt] = useState(false);
 
-    const [chatInput, setChatInput] = useState("");
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState<
+    { sender?: string; text: string; isSystem?: boolean }[]
+  >([]);
 
-    const [chatMessages, setChatMessages] = useState<
-    { sender?: string; text: string; isSystem?: boolean }[] >([]);
+  const isDrawer = Boolean(socket.id && socket.id === drawerSocketId);
 
-    const isDrawer = Boolean(socket.id && socket.id === drawerSocketId);
-
-    // console.log("My Socket ID:", socket.id);
-    // console.log("Server Drawer Socket ID:", drawerSocketId);
-    // console.log("prompts:", prompts);
-    // console.log("Is Drawer?", isDrawer);
-
-  
   const getInitials = (name: string) => {
     if (!name) return "";
     return name
@@ -66,209 +66,265 @@ export const GamePage = () => {
   };
 
   const handleSelectPrompt = (selectedPrompt: string) => {
-    socket.emit("select-prompt" , {
+    socket.emit("select-prompt", {
       roomCode,
       selectedPrompt
     });
-
     setIsSelectingPrompt(false);
+  };
 
-  }
-
-  const handleSendChat = (e: React.FormEvent) => {
+  const handleSendChat = (e: React.SubmitEvent) => {
     e.preventDefault();
+
     if (!chatInput.trim()) return;
-    setChatInput("");
+
+    socket.emit("send-message" , { roomCode , message: chatInput});
+
+    setChatInput(""); 
   };
 
   useEffect(() => {
+    if (!roomCode) return;
 
-    if(!roomCode) return;
-
-    //Handlers
     const handleGameStarted = (data: {
-        round: number, drawer:string, drawerId:string, guessTime:number,totalRounds:number
+      round: number;
+      drawer: string;
+      drawerId: string;
+      guessTime: number;
+      totalRounds: number;
     }) => {
-        setHeaderData((prev) => ({
-            ...prev,
-            round: data.round,
-            drawerUsername: data.drawer,
-            timer: data.guessTime
-        }));
-        
-        if(data.totalRounds !== undefined)
-        {
-          setTotalRounds(data.totalRounds);
-        }
+      setHeaderData((prev) => ({
+        ...prev,
+        round: data.round,
+        drawerUsername: data.drawer,
+        timer: data.guessTime
+      }));
 
-        setDrawerSocketId(data.drawerId);
+      if (data.totalRounds !== undefined) {
+        setTotalRounds(data.totalRounds);
+      }
+
+      setDrawerSocketId(data.drawerId);
+
+      updateShowRoundBanner(true);
+      setIsSelectingPrompt(false);
+
+      setTimeout(() => {
+        updateShowRoundBanner(false);
         setIsSelectingPrompt(true);
+      }, 2500);
     };
 
     const handleRoomUpdated = (data: RoomStatePayload) => {
-      //data -> Checks if data is not null or undefined
-      //Array.isArray -> Checks if data.players actually exists and is an Array
-    if (data && Array.isArray(data.players)) {
+      if (data && Array.isArray(data.players)) {
         setPlayers(data.players);
       }
 
-      // Update totalRounds state from server
-        if (data?.rounds !== undefined) {
-          setTotalRounds(data.rounds);
-        }
+      if (data?.rounds !== undefined) {
+        setTotalRounds(data.rounds);
+      }
 
-    if(data?.drawerSocketId)
-    {
-      setDrawerSocketId(data.drawerSocketId);
-    }
+      if (data?.drawerSocketId) {
+        setDrawerSocketId(data.drawerSocketId);
+      }
 
-    if(data?.drawerUsername)
-    {
-      setHeaderData((prev) => ({
-        ...prev,
-        drawerUsername: data.drawerUsername!
-      }));
-    }
-  };
+      if (data?.drawerUsername) {
+        setHeaderData((prev) => ({
+          ...prev,
+          drawerUsername: data.drawerUsername!
+        }));
+      }
+    };
 
-  const handlePromptOptions = (data: { prompts: string[] }) => {
-    console.log("Received prompt options on client:", data?.prompts);
-    if (data?.prompts && Array.isArray(data.prompts)) {
+    const handlePromptOptions = (data: { prompts: string[] }) => {
+      if (data?.prompts && Array.isArray(data.prompts)) {
         setPrompts(data.prompts);
-        setIsSelectingPrompt(true);
+        if (!showRoundBannerRef.current) {
+          setIsSelectingPrompt(true);
+        }
       }
-  };
+    };
 
-  const handleRoundStarted = (data: {
-    word?: string ; wordLength?:number; image: string ; guessTime:number ; drawerId?: string
-  }) => {
+    const handleRoundStarted = (data: {
+      word?: string;
+      wordLength?: number;
+      image: string;
+      guessTime: number;
+      drawerId?: string;
+    }) => {
+      setGamePhase("round");
 
-    setGamePhase("round");
-
-    if(data.image)
-    {
-      setCurrentImage(data.image);
-    }
-
-    setHeaderData((prev) => ({
-      ...prev,
-      timer: data.guessTime
-    }));
-
-    // Primary check (data.drawerId exists): Checks directly against the drawerId sent fresh inside the event payload from the server.
-    // Fallback check (data.drawerId is missing): Falls back to comparing against drawerSocketId stored in React state.
-   
-    if (data.drawerId) {
-      setDrawerSocketId(data.drawerId);
-    }
-    
-    const amIDrawer = Boolean(socket.id && (data.drawerId ? socket.id === data.drawerId : socket.id === drawerSocketId));
-
-    if(amIDrawer && data.word)
-    {
-      setCurrentWord(data.word);
-    }
-    
-    if(data.wordLength)
-    {
-      setWordLength(data.wordLength);
-    }
-
-    setPrompts([]);
-    setIsSelectingPrompt(false);
-  };
-
-  //Trigger state/prompt fetches ONLY after successful reconnect
-  const handleReconnectSuccess = () => {
-    socket.emit("get-room-state" , roomCode);
-    socket.emit("get-prompt-options" , roomCode);
-    socket.emit("get-current-game-state" , roomCode);
-  };
-
-  const handleCurrentGameState = (data: {
-    phase: "prompt-selection" | "round";
-    prompts?: string[];
-    word?: string;
-    wordLength?: number;
-    image?: string;
-    guessTime: number;
-    drawerId?: string;
-  }) => {
-
-    if(data.drawerId)
-    {
-      setDrawerSocketId(data.drawerId);
-    }
-
-    //prompt selection
-    if(data.phase === "prompt-selection")
-    {
-      setPrompts(data.prompts || []);
-      setIsSelectingPrompt(true);
-
-      return;
-    }
-
-    // ROUND
-    if(data.phase === "round")
-    {
-      setIsSelectingPrompt(false);
-      setPrompts([]);
-
-      if(data.guessTime !== undefined)
-      {
-            setHeaderData((prev) => ({
-          ...prev ,
-          timer: data.guessTime,
-          }));
-      }
-
-      if(data.image)
-      {
+      if (data.image) {
         setCurrentImage(data.image);
       }
 
-      if(data.word)
-    {
-      setCurrentWord(data.word);
+      setHeaderData((prev) => ({
+        ...prev,
+        timer: data.guessTime
+      }));
+
+      if (data.drawerId) {
+        setDrawerSocketId(data.drawerId);
+      }
+
+      const amIDrawer = Boolean(
+        socket.id && (data.drawerId ? socket.id === data.drawerId : socket.id === drawerSocketId)
+      );
+
+      if (amIDrawer && data.word) {
+        setCurrentWord(data.word);
+      }
+
+      if (data.wordLength) {
+        setWordLength(data.wordLength);
+      }
+
+      setPrompts([]);
+      setIsSelectingPrompt(false);
+      setShowRoundBanner(false);
+    };
+
+    const handleReconnectSuccess = () => {
+      socket.emit("get-room-state", roomCode);
+      socket.emit("get-prompt-options", roomCode);
+      socket.emit("get-current-game-state", roomCode);
+    };
+
+      const handleCurrentGameState = (data: {
+      phase: "prompt-selection" | "round";
+      prompts?: string[];
+      round: number;
+      totalRounds: number;
+      drawerUsername: string;
+      word?: string;
+      wordLength?: number;
+      image?: string;
+      guessTime: number;
+      drawerId?: string;
+    }) => {
+      const activeDrawerId = data.drawerId || drawerSocketId;
+      const amIDrawer = Boolean(socket.id && socket.id === activeDrawerId);
+
+      if (data.drawerId) {
+        setDrawerSocketId(data.drawerId);
+      }
+
+      if (data.phase === "prompt-selection") {
+        setHeaderData((prev) => ({
+          ...prev,
+          round: data.round ?? prev.round,
+          drawerUsername: data.drawerUsername ?? prev.drawerUsername,
+          timer: data.guessTime ?? prev.timer
+        }));
+
+        if (data.totalRounds !== undefined) {
+          setTotalRounds(data.totalRounds);
+        }
+
+        // 1. Show round banner first
+        updateShowRoundBanner(true);
+        setIsSelectingPrompt(false);
+
+        // 2. Hide banner and reveal prompts after delay
+        setTimeout(() => {
+          updateShowRoundBanner(false);
+
+          // Use fresh amIDrawer variable calculated from data.drawerId
+          if (amIDrawer) {
+            setPrompts(data.prompts || []);
+            setIsSelectingPrompt(true);
+          } else {
+            setIsSelectingPrompt(true);
+          }
+        }, 2500);
+
+        return;
+      }
+
+      if (data.phase === "round") {
+        setShowRoundBanner(false);
+        setIsSelectingPrompt(false);
+        setPrompts([]);
+
+        if (data.guessTime !== undefined) {
+          setHeaderData((prev) => ({
+            ...prev,
+            timer: data.guessTime
+          }));
+        }
+
+        if (data.image) {
+          setCurrentImage(data.image);
+        }
+
+        if (data.word) {
+          setCurrentWord(data.word);
+        }
+
+        if (data.wordLength !== undefined) {
+          setWordLength(data.wordLength);
+        }
+      }
+    };
+
+     const handleChatMessage = (data : {
+      username: string;
+      message: string;
+    }) => {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            sender: data.username,
+            text: data.message
+          }
+        ]);
     }
 
-     if(data.wordLength !== undefined)
-    {
-      setWordLength(data.wordLength);
-    }
+    // Attach Listeners
+    socket.on("game-started", handleGameStarted);
+    socket.on("room-updated", handleRoomUpdated);
+    socket.on("prompt-options", handlePromptOptions);
+    socket.on("round-started", handleRoundStarted);
+    socket.on("reconnect-success", handleReconnectSuccess);
+    socket.on("current-game-state", handleCurrentGameState);
+    socket.on("chat-message", handleChatMessage);
 
-    }   
+    // Reconnect emission
+    socket.emit("reconnect-room", { username, roomCode });
+    socket.emit("reconnect-success");
 
-  };
-
-  //Listeners
-  socket.on("game-started" , handleGameStarted);
-  socket.on("room-updated" , handleRoomUpdated);
-  socket.on("prompt-options" , handlePromptOptions);
-  socket.on("round-started" , handleRoundStarted);
-  socket.on("reconnect-success" , handleReconnectSuccess);
-   socket.on("current-game-state" , handleCurrentGameState); 
-  
-
-// Attempt reconnection on mount / refresh
-  socket.emit("reconnect-room", { username, roomCode });
- 
-
-
+    // Cleanup Listeners on unmount
     return () => {
-        socket.off("game-started", handleGameStarted);
-        socket.off("room-updated", handleRoomUpdated);
-        socket.off("prompt-options", handlePromptOptions);
-        socket.off("round-started", handleRoundStarted);
-        socket.off("reconnect-success", handleReconnectSuccess);
-        socket.off("current-game-state" , handleCurrentGameState); 
-    }
+      socket.off("game-started", handleGameStarted);
+      socket.off("room-updated", handleRoomUpdated);
+      socket.off("prompt-options", handlePromptOptions);
+      socket.off("round-started", handleRoundStarted);
+      socket.off("reconnect-success", handleReconnectSuccess);
+      socket.off("current-game-state", handleCurrentGameState);
+      socket.off("chat-message", handleChatMessage);
+    };
   }, [roomCode, username]);
-
 
   return (
     <div className="min-h-screen bg-[#171717] text-[#171717] flex flex-col font-sans p-3 sm:p-5 md:p-6">
+      
+      {/* 1. ROUND INTRO BANNER OVERLAY */}
+      {showRoundBanner && (
+        <div className="fixed inset-0 bg-[#171717]/90 z-50 flex flex-col items-center justify-center p-4 transition-all duration-500 animate-in fade-in">
+          <div className="border-4 border-[#e9dfc4] bg-[#b22222] text-[#f0ece1] p-8 max-w-lg w-full text-center shadow-[10px_10px_0px_0px_rgba(23,23,23,1)] transform transition-transform animate-bounce">
+            <span className="font-mono text-sm tracking-widest uppercase block mb-1">
+              CASE INITIATED
+            </span>
+            <h1 className="font-display text-4xl sm:text-5xl font-black uppercase tracking-wider mb-2">
+              ROUND {headerData.round}
+            </h1>
+            <p className="font-mono text-xs uppercase tracking-wider opacity-90">
+              SKETCH ARTIST: <strong className="underline">{headerData.drawerUsername}</strong>
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl w-full mx-auto flex flex-col flex-1 bg-[#e9dfc4] border-2 border-[#171717] shadow-[6px_6px_0px_0px_rgba(23,23,23,1)] relative overflow-hidden">
         
         {/* CASE FILE TOP BADGE STAMP */}
@@ -276,7 +332,7 @@ export const GamePage = () => {
           EVIDENCE DASHBOARD — ACTIVE CASE
         </div>
 
-        {/* 1. TOP HEADER BAR */}
+        {/* 2. TOP HEADER BAR */}
         <header className="border-b-2 border-[#171717] p-3 sm:p-4 pt-8 sm:pt-6 flex flex-wrap items-center justify-between gap-3 bg-[#dfd4b7]/50">
           <div className="flex flex-wrap items-center gap-3">
             {/* Round Badge */}
@@ -294,41 +350,33 @@ export const GamePage = () => {
               CASE NO: <strong className="text-[#e9dfc4]">{roomCode}</strong>
             </div>
 
-              {/* Showing the word in the drawer sreen */}
-            {
-              isDrawer && currentWord.length > 0 && (
-                <div className="border border-[#171717] px-2.5 py-1 font-mono text-xs tracking-wider uppercase bg-[#e9dfc4]">
-                 WORD SELECTED: <strong className="text-base text-[#171717]">{currentWord}</strong>
-            </div>
-              ) 
-            }
+            {/* Showing selected word to current drawer */}
+            {isDrawer && currentWord.length > 0 && (
+              <div className="border border-[#171717] px-2.5 py-1 font-mono text-xs tracking-wider uppercase bg-[#e9dfc4]">
+                WORD SELECTED: <strong className="text-base text-[#171717]">{currentWord}</strong>
+              </div>
+            )}
 
-            {
-               !isDrawer && wordLength>0 && (
-                <div className="flex gap-2 justify-center my-4 font-mono text-xl font-bold">
-                    {
-                      Array.from({ length: wordLength }).map((_ , index) => (
-                        <span key={index} className="border-b-2 border-[#171717] w-6 text-center">
-                          _
-                        </span>
-                      ))
-                    }
-                </div>
-               )
-            }
-
-           
-
+            {/* Guesser word slots */}
+            {!isDrawer && !showRoundBanner && wordLength > 0 && (
+              <div className="flex gap-2 justify-center my-4 font-mono text-xl font-bold">
+                {Array.from({ length: wordLength }).map((_, index) => (
+                  <span key={index} className="border-b-2 border-[#171717] w-6 text-center">
+                    _
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Current Drawer Banner */}
+          {/* Current Drawer Badge */}
           <div className="flex items-center gap-2 border border-[#b22222] bg-[#b22222]/10 px-3 py-1 font-mono text-xs tracking-wider uppercase text-[#b22222]">
             <span>SKETCH ARTIST:</span>
             <strong className="underline">{headerData.drawerUsername}</strong>
           </div>
         </header>
 
-        {/* 2. MAIN CONTENT AREA (Flex-1 layout giving slightly more room to Sidebar) */}
+        {/* 3. MAIN CONTENT AREA */}
         <main className="flex-1 flex flex-col lg:flex-row divide-y-2 lg:divide-y-0 lg:divide-x-2 divide-[#171717]">
           
           {/* LEFT: CANVAS AREA */}
@@ -337,32 +385,29 @@ export const GamePage = () => {
             {/* CANVAS BOARD */}
             <div className="relative flex-1 bg-white border-2 border-[#171717] min-h-[400px] lg:min-h-[460px] flex flex-col items-center justify-center shadow-[3px_3px_0px_0px_rgba(23,23,23,1)]">
 
-          {/* AI GENERATED CLUE IMAGE */}
-          {currentImage ? (
-            <img
-              src={currentImage}
-              alt="AI generated clue"
-              className="max-h-[320px] max-w-full w-auto h-auto object-contain rounded border border-[#171717]"
-            />
-          ) : (
-            /* PLACEHOLDER CANVAS TEXT (Shown when no image is generated yet) */
-            <div className="text-center font-mono select-none">
-              <span className="text-4xl block mb-2">🎨</span>
-              <p className="text-xs uppercase tracking-widest text-zinc-600">
-                Evidence Board / Canvas Area
-              </p>
-              <p className="text-[10px] text-zinc-400 mt-1">
-                (Waiting for prompt selection...)
-              </p>
-            </div>
-          )}
-                    
+              {/* AI GENERATED CLUE IMAGE */}
+              {currentImage ? (
+                <img
+                  src={currentImage}
+                  alt="AI generated clue"
+                  className="max-h-[320px] max-w-full w-auto h-auto object-contain rounded border border-[#171717]"
+                />
+              ) : (
+                <div className="text-center font-mono select-none">
+                  <span className="text-4xl block mb-2">🎨</span>
+                  <p className="text-xs uppercase tracking-widest text-zinc-600">
+                    Evidence Board / Canvas Area
+                  </p>
+                  <p className="text-[10px] text-zinc-400 mt-1">
+                    (Waiting for prompt selection...)
+                  </p>
+                </div>
+              )}
 
-              {/* OVERLAY: PROMPT SELECTION (Shown to Drawer) */}
-              {isDrawer && prompts.length > 0 && (
+              {/* OVERLAY: PROMPT SELECTION (Shown to Drawer ONLY after Round Banner finishes) */}
+              {isDrawer && !showRoundBanner && isSelectingPrompt && prompts.length > 0 && (
                 <div className="absolute inset-0 bg-[#171717]/85 backdrop-blur-xs flex flex-col items-center justify-center p-6 z-30">
                   <div className="bg-[#e9dfc4] border-2 border-[#171717] p-6 max-w-md w-full shadow-[6px_6px_0px_0px_rgba(178,34,34,1)] relative">
-                    
                     <div className="absolute -top-3 left-4 bg-[#b22222] text-[#f0ece1] px-2 py-0.5 font-mono text-[10px] tracking-widest uppercase border border-[#171717]">
                       CLASSIFIED INSTRUCTION
                     </div>
@@ -390,7 +435,7 @@ export const GamePage = () => {
               )}
 
               {/* WAITING OVERLAY (Shown to Guessers) */}
-              {!isDrawer && isSelectingPrompt && (
+              {!isDrawer && !showRoundBanner && isSelectingPrompt && (
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-[#171717] text-[#e9dfc4] border border-[#171717] px-4 py-2 font-mono text-xs uppercase tracking-wider shadow-[3px_3px_0px_0px_rgba(178,34,34,1)] flex items-center gap-2">
                   <span className="w-2 h-2 bg-[#b22222] animate-ping rounded-full" />
                   WAITING FOR <span className="text-[#f0ece1] font-bold">{headerData.drawerUsername}</span> TO SELECT A CASE PROMPT...
@@ -399,7 +444,7 @@ export const GamePage = () => {
             </div>
           </div>
 
-          {/* RIGHT SIDEBAR: PLAYERS & CHAT (Widened slightly: w-full lg:w-80 xl:w-96) */}
+          {/* RIGHT SIDEBAR: PLAYERS & CHAT */}
           <div className="w-full lg:w-80 xl:w-96 flex flex-col h-[520px] lg:h-auto divide-y-2 divide-[#171717] shrink-0">
             
             {/* PLAYERS LIST */}
@@ -427,19 +472,13 @@ export const GamePage = () => {
                           : "bg-[#e9dfc4] border-[#171717]/30 hover:border-[#171717]"
                       }`}
                     >
-                      {/* Left Group: Badge + Name + Role Tags */}
                       <div className="flex items-center gap-2 min-w-0 flex-1">
-                        {/* Initials Badge */}
                         <span className="flex h-6 w-6 items-center justify-center rounded-full border border-[#171717] text-[10px] font-bold bg-[#e9dfc4] text-[#171717] shrink-0">
                           {getInitials(player.username)}
                         </span>
 
-                        {/* Name + Tags Wrapper */}
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <span 
-                            className="truncate font-bold text-[#171717] block" 
-                            title={player.username}
-                          >
+                          <span className="truncate font-bold text-[#171717] block" title={player.username}>
                             {player.username}
                           </span>
 
@@ -456,11 +495,6 @@ export const GamePage = () => {
                           )}
                         </div>
                       </div>
-
-                      {/* Right Group: Score */}
-                      {/* <span className="font-bold border border-[#171717] px-2 py-0.5 bg-[#e9dfc4] text-[11px] text-[#171717] tabular-nums shrink-0 shadow-[1px_1px_0px_0px_rgba(23,23,23,1)]">
-                        {player.score} PTS
-                      </span> */}
                     </div>
                   );
                 })}

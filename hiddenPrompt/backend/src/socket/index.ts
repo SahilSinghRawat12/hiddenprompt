@@ -1,6 +1,7 @@
 import { Server , Socket } from "socket.io";
 import { registerRoomHandler } from "./roomHandler.js";
 import { registerGameHandler } from "./gameHandler.js";
+import { registerChatHandler } from "./chatHandler.js";
 
  
 
@@ -12,6 +13,7 @@ export const registerSocketEvents = (io: Server) => {
 
         registerRoomHandler(io , socket);
         registerGameHandler(io , socket);
+        registerChatHandler(io , socket);
 
       
 

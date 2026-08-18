@@ -12,7 +12,6 @@ export type Room = {
         maxRounds: number;
         guessTime: number;
     }
-    
 
     gameStarted: boolean;
     currentRound: number;
@@ -20,5 +19,6 @@ export type Room = {
     promptOptions: string[];
     currentWord: string | null;
     currentImageUrl: string | null;
+    guessedPlayers: string[];
 
 }
