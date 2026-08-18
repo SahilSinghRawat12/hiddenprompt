@@ -109,7 +109,7 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
             });
 
             console.log("Sending prompts:", room.promptOptions);
-console.log("Drawer socket:", drawer.socketId);
+            console.log("Drawer socket:", drawer.socketId);
              // Emit secret prompt options ONLY to the drawer
             io.to(drawer?.socketId).emit("prompt-options" , {
                 prompts: room.promptOptions
@@ -124,7 +124,7 @@ console.log("Drawer socket:", drawer.socketId);
             const code = roomCode.trim().toUpperCase();
             const room = rooms.get(code);
 
-            if(!room || !room.gameStarted) return;
+            if(!room || !room.gameStarted || !socket.rooms.has(code)) return;
 
             const currentDrawer = room.players[room.currentDrawerIndex];
 
@@ -148,7 +148,7 @@ console.log("Drawer socket:", drawer.socketId);
              const code = roomCode.trim().toUpperCase();
 
              const room = rooms.get(code);
-            if(!room || !room.gameStarted) return;
+            if(!room || !room.gameStarted || !socket.rooms.has(code)) return;
 
             //prevent double selection
             if(room.currentWord) return; // Word has already been selected for this round
@@ -161,14 +161,15 @@ console.log("Drawer socket:", drawer.socketId);
             const isValidPrompt = room.promptOptions?.includes(selectedPrompt);
             if(!isValidPrompt) return;
 
-            //All validation passed: Now apply state , updates and broadcast
-            room.currentWord = selectedPrompt;
-            room.promptOptions = [];  // clear options after choice
-
-            //Generate image
+            
+        try {
+                //Generate image
             const image = await generateImage(selectedPrompt);
             const imageData = `data:image/png;base64,${image.toString("base64")}`;
 
+            //All validation passed: Now apply state , updates and broadcast
+            room.currentWord = selectedPrompt;
+            room.promptOptions = [];  // clear options after choice
             room.currentImageUrl = imageData;
 
 
@@ -190,6 +191,15 @@ console.log("Drawer socket:", drawer.socketId);
                 guessTime: room.settings.guessTime,
                 drawerId: drawerSocketId,
             });
+        }
+            catch (error) {
+                    console.error("Image generation failed:", error);
+
+                    room.currentWord = null;
+                    room.promptOptions = []; // or restore them if you want
+
+                    socket.emit("game-error", "Failed to generate image.");
+                }
  
         });
 
@@ -200,26 +210,53 @@ console.log("Drawer socket:", drawer.socketId);
             const code = roomCode.trim().toUpperCase();
             const room = rooms.get(code);
 
-            if(!room || !room.gameStarted) return;
+            if(!room || !room.gameStarted || !socket.rooms.has(code)) return;
 
             const currentDrawer = room.players[room.currentDrawerIndex];
             const isDrawer = currentDrawer?.socketId === socket.id;
 
-            if(isDrawer) {
-                 socket.emit("current-game-state", {
-                word: room.currentWord,
-                guessTime: room.settings.guessTime,
-                drawerId: currentDrawer?.socketId
-                });
-            } else 
-            {
-                 socket.emit("current-game-state", {
-                wordLength: room.currentWord?.length,
-                guessTime: room.settings.guessTime,
-                drawerId: currentDrawer?.socketId
-                });
-            }
+            // --- PHASE 1: Prompt Selection (Before a word is selected) ---
+            if(!room.currentWord) {
 
+                  // Drawer is still choosing a prompt
+                  if(isDrawer && room.promptOptions.length > 0)
+                  {
+                    socket.emit("current-game-state", {
+                        phase: "prompt-selection",
+                        prompts: room.promptOptions,
+                        drawerId: currentDrawer?.socketId,
+                    });
+                  }else {
+                                // Guesser waiting for drawer to pick
+                        socket.emit("current-game-state", {
+                            phase: "prompt-selection",
+                            drawerId: currentDrawer?.socketId,
+                        });
+                    }
+                    return;
+                  }
+
+                  // --- PHASE 2: Active Round (After word & image are generated) ---
+
+                if (isDrawer) {
+                        socket.emit("current-game-state", {
+                        phase: "round",
+                        word: room.currentWord,
+                        image: room.currentImageUrl,
+                        guessTime: room.settings.guessTime,
+                        drawerId: currentDrawer?.socketId,
+                        round: room.currentRound
+                    });
+                } else {
+                    socket.emit("current-game-state", {
+                        phase: "round",
+                        wordLength: room.currentWord.length,
+                        image: room.currentImageUrl,
+                        guessTime: room.settings.guessTime,
+                        drawerId: currentDrawer?.socketId,
+                        round: room.currentRound
+                    });
+                }
         } );
 
       }

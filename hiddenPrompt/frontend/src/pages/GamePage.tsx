@@ -29,7 +29,8 @@ export const GamePage = () => {
     });
 
     const [totalRounds , setTotalRounds ] = useState<number>(0);
-
+    const [gamePhase , setGamePhase] = useState<"prompt-selection" | "round" | null>(null);
+    const [currentImage, setCurrentImage] = useState("");
     const [currentWord , setCurrentWord] = useState<string>("");
     const [wordLength , setWordLength] = useState<number>(0);
 
@@ -38,6 +39,8 @@ export const GamePage = () => {
     const [ drawerSocketId , setDrawerSocketId ] = useState<string>("");
     const [isSelectingPrompt, setIsSelectingPrompt] = useState(false);
 
+    
+
     const [chatInput, setChatInput] = useState("");
 
     const [chatMessages, setChatMessages] = useState<
@@ -45,10 +48,10 @@ export const GamePage = () => {
 
     const isDrawer = Boolean(socket.id && socket.id === drawerSocketId);
 
-    console.log("My Socket ID:", socket.id);
-console.log("Server Drawer Socket ID:", drawerSocketId);
-console.log("prompts:", prompts);
-console.log("Is Drawer?", isDrawer);
+    // console.log("My Socket ID:", socket.id);
+    // console.log("Server Drawer Socket ID:", drawerSocketId);
+    // console.log("prompts:", prompts);
+    // console.log("Is Drawer?", isDrawer);
 
   
   const getInitials = (name: string) => {
@@ -136,7 +139,17 @@ console.log("Is Drawer?", isDrawer);
       }
   };
 
-  const handleRoundStarted = (data: {word?: string , wordLength?:number , guessTime:number , drawerId?: string}) => {
+  const handleRoundStarted = (data: {
+    word?: string ; wordLength?:number; image: string ; guessTime:number ; drawerId?: string
+  }) => {
+
+    setGamePhase("round");
+
+    if(data.image)
+    {
+      setCurrentImage(data.image);
+    }
+
     setHeaderData((prev) => ({
       ...prev,
       timer: data.guessTime
@@ -173,31 +186,59 @@ console.log("Is Drawer?", isDrawer);
   };
 
   const handleCurrentGameState = (data: {
+    phase: "prompt-selection" | "round";
+    prompts?: string[];
     word?: string;
     wordLength?: number;
+    image?: string;
     guessTime: number;
     drawerId?: string;
   }) => {
-
-    setHeaderData((prev) => ({
-      ...prev ,
-      timer: data.guessTime,
-    }));
 
     if(data.drawerId)
     {
       setDrawerSocketId(data.drawerId);
     }
 
-    if(data.word)
+    //prompt selection
+    if(data.phase === "prompt-selection")
+    {
+      setPrompts(data.prompts || []);
+      setIsSelectingPrompt(true);
+
+      return;
+    }
+
+    // ROUND
+    if(data.phase === "round")
+    {
+      setIsSelectingPrompt(false);
+      setPrompts([]);
+
+      if(data.guessTime !== undefined)
+      {
+            setHeaderData((prev) => ({
+          ...prev ,
+          timer: data.guessTime,
+          }));
+      }
+
+      if(data.image)
+      {
+        setCurrentImage(data.image);
+      }
+
+      if(data.word)
     {
       setCurrentWord(data.word);
     }
 
-    if(data.wordLength)
+     if(data.wordLength !== undefined)
     {
       setWordLength(data.wordLength);
     }
+
+    }   
 
   };
 
@@ -295,17 +336,27 @@ console.log("Is Drawer?", isDrawer);
             
             {/* CANVAS BOARD */}
             <div className="relative flex-1 bg-white border-2 border-[#171717] min-h-[400px] lg:min-h-[460px] flex flex-col items-center justify-center shadow-[3px_3px_0px_0px_rgba(23,23,23,1)]">
-              
-              {/* PLACEHOLDER CANVAS TEXT */}
-              <div className="text-center font-mono select-none">
-                <span className="text-4xl block mb-2">🎨</span>
-                <p className="text-xs uppercase tracking-widest text-zinc-600">
-                  Evidence Board / Canvas Area
-                </p>
-                <p className="text-[10px] text-zinc-400 mt-1">
-                  (Live sync stroke renderer)
-                </p>
-              </div>
+
+          {/* AI GENERATED CLUE IMAGE */}
+          {currentImage ? (
+            <img
+              src={currentImage}
+              alt="AI generated clue"
+              className="max-h-[320px] max-w-full w-auto h-auto object-contain rounded border border-[#171717]"
+            />
+          ) : (
+            /* PLACEHOLDER CANVAS TEXT (Shown when no image is generated yet) */
+            <div className="text-center font-mono select-none">
+              <span className="text-4xl block mb-2">🎨</span>
+              <p className="text-xs uppercase tracking-widest text-zinc-600">
+                Evidence Board / Canvas Area
+              </p>
+              <p className="text-[10px] text-zinc-400 mt-1">
+                (Waiting for prompt selection...)
+              </p>
+            </div>
+          )}
+                    
 
               {/* OVERLAY: PROMPT SELECTION (Shown to Drawer) */}
               {isDrawer && prompts.length > 0 && (
