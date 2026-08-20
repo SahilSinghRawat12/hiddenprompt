@@ -1,6 +1,7 @@
 export type RoomUser = {
     username: string;
     socketId: string;
+    score: number;
 }
 
 export type Room = {
@@ -20,5 +21,6 @@ export type Room = {
     currentWord: string | null;
     currentImageUrl: string | null;
     guessedPlayers: string[];
+    turnEnded: boolean;
 
 }

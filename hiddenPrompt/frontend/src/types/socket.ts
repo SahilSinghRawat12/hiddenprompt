@@ -1,6 +1,7 @@
 export type RoomUser = {
     username: string;
     socketId: string;
+    score: number;
 }
 
 export interface RoomData {

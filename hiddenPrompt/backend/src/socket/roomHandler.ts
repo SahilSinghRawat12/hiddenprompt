@@ -32,7 +32,8 @@ import { generateRoomCode } from "../utils/generateRoomCode.js";
                 players: [
                     {
                         username: sanitizedUsername,
-                        socketId: socket.id
+                        socketId: socket.id,
+                        score: 0,
                     }
                 ],
                 settings: {
@@ -44,7 +45,9 @@ import { generateRoomCode } from "../utils/generateRoomCode.js";
                 currentDrawerIndex: 0,
                 promptOptions: [],
                 currentWord: null,
-                currentImageUrl: null
+                currentImageUrl: null,
+                guessedPlayers: [],
+                turnEnded: false,
             });
             
             // join socket room and notify client
@@ -140,7 +143,8 @@ import { generateRoomCode } from "../utils/generateRoomCode.js";
             //add player to target room
             targetRoom.players.push({
                 username: sanitizedUsername,
-                socketId: socket.id
+                socketId: socket.id,
+                score: 0
             })
 
             socket.join(roomCode);
@@ -193,6 +197,7 @@ import { generateRoomCode } from "../utils/generateRoomCode.js";
                     targetRoom.players.push({
                         username: sanitizedUsername,
                         socketId: socket.id,
+                        score: 0
                     });
                 }
 

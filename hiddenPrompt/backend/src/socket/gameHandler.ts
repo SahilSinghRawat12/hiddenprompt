@@ -161,6 +161,13 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
             const isValidPrompt = room.promptOptions?.includes(selectedPrompt);
             if(!isValidPrompt) return;
 
+            // Set current word early to lock double-selection
+            room.currentWord = selectedPrompt;
+            room.promptOptions = [];
+
+            // Notify EVERYONE in the room that image generation has started
+            io.to(code).emit("image-generation-started");
+
             
         try {
                 //Generate image
@@ -171,6 +178,9 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
             room.currentWord = selectedPrompt;
             room.promptOptions = [];  // clear options after choice
             room.currentImageUrl = imageData;
+
+            room.guessedPlayers = [];
+            room.turnEnded = false;
 
 
             const drawerSocketId = room.players[room.currentDrawerIndex]?.socketId;
@@ -198,6 +208,8 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
                     room.currentWord = null;
                     room.promptOptions = []; // or restore them if you want
 
+                    // Notify room that generation failed so clients can reset loading state
+                    io.to(code).emit("image-generation-failed");
                     socket.emit("game-error", "Failed to generate image.");
                 }
  

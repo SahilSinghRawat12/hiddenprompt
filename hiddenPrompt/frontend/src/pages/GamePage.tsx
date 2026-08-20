@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { socket } from "../socket/socket";
 import type { RoomUser } from "../types/socket";
+import toast from "react-hot-toast";
 
 // Type definition for room-updated payload
 interface RoomStatePayload {
@@ -50,6 +51,14 @@ export const GamePage = () => {
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState<
     { sender?: string; text: string; isSystem?: boolean }[]
+  >([]);
+
+  const [showScoreboard, setShowScoreboard] = useState(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
+  const [isGeneratingPrompts, setIsGeneratingPrompts] = useState(false);  
+
+  const [scores, setScores] = useState<
+    { username: string; score: number }[]
   >([]);
 
   const isDrawer = Boolean(socket.id && socket.id === drawerSocketId);
@@ -137,7 +146,9 @@ export const GamePage = () => {
     };
 
     const handlePromptOptions = (data: { prompts: string[] }) => {
-      if (data?.prompts && Array.isArray(data.prompts)) {
+
+      if (data?.prompts || Array.isArray(data.prompts)) {
+        setIsGeneratingPrompts(false);
         setPrompts(data.prompts);
         if (!showRoundBannerRef.current) {
           setIsSelectingPrompt(true);
@@ -152,6 +163,10 @@ export const GamePage = () => {
       guessTime: number;
       drawerId?: string;
     }) => {
+
+      // Image has finished generating
+      setIsGeneratingImage(false);
+
       setGamePhase("round");
 
       if (data.image) {
@@ -268,17 +283,87 @@ export const GamePage = () => {
     };
 
      const handleChatMessage = (data : {
-      username: string;
-      message: string;
+      sender?: string;
+      text: string;
+      isSystem?: boolean;
     }) => {
         setChatMessages((prev) => [
           ...prev,
           {
-            sender: data.username,
-            text: data.message
+            sender: data.sender,
+            text: data.text,
+            isSystem: data.isSystem
           }
         ]);
-    }
+    };
+
+    const handleTurnEnded = (data: {
+      scores: { username: string; score: number }[];
+    }) => {
+      setScores(data.scores);
+      setShowScoreboard(true);
+    };
+
+    const handleTurnStarted = (data: {
+      round: number;
+    drawerId: string;
+    drawerUsername: string;
+    guessTime: number;
+    }) => {
+
+      setShowScoreboard(false);
+
+      // Clear previous turn
+      setCurrentImage("");
+      setCurrentWord("");
+      setWordLength(0);
+      setPrompts([]);
+
+      setIsGeneratingImage(false);
+      setIsSelectingPrompt(false);
+
+       setGamePhase("prompt-selection");
+
+       setIsGeneratingImage(true);
+
+      setDrawerSocketId(data.drawerId);
+
+      setHeaderData((prev) => ({
+          ...prev,
+          round: data.round,
+          drawerUsername: data.drawerUsername,
+          timer: data.guessTime,
+      }));
+
+    };
+
+    const handleImageGenerationStarted = () => {
+      // Remove old image immediately
+        setCurrentImage("");
+
+        // Remove old word/dashes
+        setCurrentWord("");
+        setWordLength(0);
+
+        // Show loading
+        setIsGeneratingImage(true);
+
+        // Prompt selection is finished
+        setIsSelectingPrompt(false);
+    };
+
+    const handleImageGenerationFailed = () => {
+      setIsGeneratingImage(false);
+
+      setCurrentImage("");
+      setCurrentWord("");
+      setWordLength(0);
+
+      setIsSelectingPrompt(true);
+
+      toast.error("AI image generation failed");
+    };
+
 
     // Attach Listeners
     socket.on("game-started", handleGameStarted);
@@ -288,6 +373,10 @@ export const GamePage = () => {
     socket.on("reconnect-success", handleReconnectSuccess);
     socket.on("current-game-state", handleCurrentGameState);
     socket.on("chat-message", handleChatMessage);
+    socket.on("turn-ended", handleTurnEnded);
+    socket.on("turn-started", handleTurnStarted);
+    socket.on("image-generation-started",handleImageGenerationStarted);
+    socket.on("image-generation-failed",handleImageGenerationFailed);
 
     // Reconnect emission
     socket.emit("reconnect-room", { username, roomCode });
@@ -302,12 +391,49 @@ export const GamePage = () => {
       socket.off("reconnect-success", handleReconnectSuccess);
       socket.off("current-game-state", handleCurrentGameState);
       socket.off("chat-message", handleChatMessage);
+      socket.off("turn-ended", handleTurnEnded);
+      socket.off("turn-started", handleTurnStarted);
+      socket.off("image-generation-started",handleImageGenerationStarted);
+      socket.off("image-generation-failed",handleImageGenerationFailed);
     };
   }, [roomCode, username]);
 
   return (
     <div className="min-h-screen bg-[#171717] text-[#171717] flex flex-col font-sans p-3 sm:p-5 md:p-6">
       
+       {/* SCOREBOARD OVERLAY */}
+          {showScoreboard && (
+        <div className="fixed inset-0 z-50 bg-[#171717]/90 flex items-center justify-center p-4">
+          <div className="bg-[#e9dfc4] border-4 border-[#171717] p-8 w-full max-w-lg shadow-[8px_8px_0px_0px_rgba(178,34,34,1)]">
+
+            <p className="font-mono text-xs uppercase tracking-widest mb-2">
+              CASE UPDATE
+            </p>
+
+            <h2 className="font-display text-4xl font-black uppercase mb-6">
+              TURN COMPLETE
+            </h2>
+
+            <div className="space-y-3">
+              {scores.map((player, index) => (
+                <div
+                  key={player.username}
+                  className="flex items-center justify-between border border-[#171717] px-4 py-3 font-mono"
+                >
+                  <div className="flex gap-3">
+                    <span>{index + 1}.</span>
+                    <strong>{player.username}</strong>
+                  </div>
+
+                  <strong>{player.score} PTS</strong>
+                </div>
+              ))}
+            </div>
+
+          </div>
+        </div>
+      )}
+
       {/* 1. ROUND INTRO BANNER OVERLAY */}
       {showRoundBanner && (
         <div className="fixed inset-0 bg-[#171717]/90 z-50 flex flex-col items-center justify-center p-4 transition-all duration-500 animate-in fade-in">
@@ -386,26 +512,58 @@ export const GamePage = () => {
             <div className="relative flex-1 bg-white border-2 border-[#171717] min-h-[400px] lg:min-h-[460px] flex flex-col items-center justify-center shadow-[3px_3px_0px_0px_rgba(23,23,23,1)]">
 
               {/* AI GENERATED CLUE IMAGE */}
-              {currentImage ? (
-                <img
-                  src={currentImage}
-                  alt="AI generated clue"
-                  className="max-h-[320px] max-w-full w-auto h-auto object-contain rounded border border-[#171717]"
-                />
-              ) : (
-                <div className="text-center font-mono select-none">
-                  <span className="text-4xl block mb-2">🎨</span>
-                  <p className="text-xs uppercase tracking-widest text-zinc-600">
-                    Evidence Board / Canvas Area
-                  </p>
-                  <p className="text-[10px] text-zinc-400 mt-1">
-                    (Waiting for prompt selection...)
-                  </p>
-                </div>
-              )}
+              {isGeneratingImage ? (
+                    <div className="flex flex-col items-center justify-center text-center font-mono">
+                      <div className="w-10 h-10 border-4 border-[#171717]/20 border-t-[#b22222] rounded-full animate-spin mb-4" />
+
+                      <p className="text-sm font-bold uppercase tracking-widest">
+                        GENERATING EVIDENCE...
+                      </p>
+
+                      <p className="text-[10px] text-zinc-500 mt-2">
+                        AI is preparing the visual clue...
+                      </p>
+                    </div>
+                  ) : currentImage ? (
+                    <img
+                      src={currentImage}
+                      alt="AI generated clue"
+                      className="max-h-[320px] max-w-full w-auto h-auto object-contain rounded border border-[#171717]"
+                    />
+                  ) : (
+                    <div className="text-center font-mono select-none">
+                      <span className="text-4xl block mb-2">🎨</span>
+
+                      <p className="text-xs uppercase tracking-widest text-zinc-600">
+                        Evidence Board / Canvas Area
+                      </p>
+
+                      <p className="text-[10px] text-zinc-400 mt-1">
+                        Waiting for prompt selection...
+                      </p>
+                    </div>
+                  )}
+
+                  {isDrawer && isGeneratingPrompts && (
+                      <div className="absolute inset-0 bg-[#171717]/85 backdrop-blur-xs flex flex-col items-center justify-center p-6 z-30">
+                        <div className="bg-[#e9dfc4] border-2 border-[#171717] p-8 max-w-md w-full text-center shadow-[6px_6px_0px_0px_rgba(178,34,34,1)]">
+
+                          <div className="w-10 h-10 mx-auto mb-5 border-4 border-[#171717]/20 border-t-[#b22222] rounded-full animate-spin" />
+
+                          <h3 className="font-display text-2xl uppercase">
+                            PREPARING CASE
+                          </h3>
+
+                          <p className="font-mono text-xs text-zinc-700 mt-2">
+                            AI is generating your prompts...
+                          </p>
+
+                        </div>
+                      </div>
+                    )}
 
               {/* OVERLAY: PROMPT SELECTION (Shown to Drawer ONLY after Round Banner finishes) */}
-              {isDrawer && !showRoundBanner && isSelectingPrompt && prompts.length > 0 && (
+              {isDrawer && !showRoundBanner && isGeneratingPrompts && isSelectingPrompt && prompts.length > 0 && (
                 <div className="absolute inset-0 bg-[#171717]/85 backdrop-blur-xs flex flex-col items-center justify-center p-6 z-30">
                   <div className="bg-[#e9dfc4] border-2 border-[#171717] p-6 max-w-md w-full shadow-[6px_6px_0px_0px_rgba(178,34,34,1)] relative">
                     <div className="absolute -top-3 left-4 bg-[#b22222] text-[#f0ece1] px-2 py-0.5 font-mono text-[10px] tracking-widest uppercase border border-[#171717]">
@@ -481,6 +639,10 @@ export const GamePage = () => {
                           <span className="truncate font-bold text-[#171717] block" title={player.username}>
                             {player.username}
                           </span>
+                          <span className="truncate font-bold text-[#171717] block" title={player.username}>
+                            {player.score} PTS
+                          </span>
+
 
                           {isYou && (
                             <span className="text-[10px] font-bold text-zinc-500 shrink-0">
