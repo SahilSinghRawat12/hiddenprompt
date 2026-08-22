@@ -2,6 +2,7 @@ import type { Server, Socket } from "socket.io";
 import { rooms } from "../state/rooms.js";
 import { broadcastRoomState } from "../utils/broadcastRoomState.js";
 import { generateImage } from "../ai/imageGenerator.js";
+import { startTurnTimer } from "../game/turnTimer.js";
 
 
 
@@ -102,7 +103,7 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
             // Broadcast game start to everyone in room
             io.to(code).emit("game-started" , {
                 round: room.currentRound,
-                totalRound: room.settings.maxRounds,
+                totalRounds: room.settings.maxRounds,
                 drawer: drawer?.username,
                 drawerId: drawer?.socketId,
                 guessTime: room.settings.guessTime
@@ -201,6 +202,8 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
                 guessTime: room.settings.guessTime,
                 drawerId: drawerSocketId,
             });
+
+            startTurnTimer(io , code);
         }
             catch (error) {
                     console.error("Image generation failed:", error);
@@ -239,7 +242,7 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
                         totalRounds: room.settings.maxRounds,
                         drawerId: currentDrawer?.socketId,
                         drawerUsername: currentDrawer?.username,
-                        guessTime: room.settings.guessTime,
+                        // guessTime: room.settings.guessTime,
                         prompts: isDrawer ? room.promptOptions : []
                     });
                   }else {

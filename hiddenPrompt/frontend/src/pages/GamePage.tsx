@@ -24,7 +24,7 @@ export const GamePage = () => {
 
   const [headerData, setHeaderData] = useState({
     round: 1,
-    timer: 15,
+    timer: 0,
     drawerUsername: ""
   });
 
@@ -60,6 +60,14 @@ export const GamePage = () => {
   const [scores, setScores] = useState<
     { username: string; score: number }[]
   >([]);
+
+  const [showGameOver, setShowGameOver] = useState(false);
+  const [finalScores , setFinalScores] = useState<
+  {
+    username: string;
+    score: number;
+  }[]>([]);
+
 
   const isDrawer = Boolean(socket.id && socket.id === drawerSocketId);
 
@@ -106,7 +114,7 @@ export const GamePage = () => {
         ...prev,
         round: data.round,
         drawerUsername: data.drawer,
-        timer: data.guessTime
+        // timer: data.guessTime
       }));
 
       if (data.totalRounds !== undefined) {
@@ -147,7 +155,7 @@ export const GamePage = () => {
 
     const handlePromptOptions = (data: { prompts: string[] }) => {
 
-      if (data?.prompts || Array.isArray(data.prompts)) {
+      if (data?.prompts && Array.isArray(data.prompts)) {
         setIsGeneratingPrompts(false);
         setPrompts(data.prompts);
         if (!showRoundBannerRef.current) {
@@ -175,7 +183,7 @@ export const GamePage = () => {
 
       setHeaderData((prev) => ({
         ...prev,
-        timer: data.guessTime
+        // timer: data.guessTime
       }));
 
       if (data.drawerId) {
@@ -332,7 +340,7 @@ export const GamePage = () => {
           ...prev,
           round: data.round,
           drawerUsername: data.drawerUsername,
-          timer: data.guessTime,
+          timer: 0,
       }));
 
     };
@@ -365,6 +373,22 @@ export const GamePage = () => {
     };
 
 
+    const handleTimerUpdate= (data: { timeLeft:number }) => {
+      setHeaderData((prev) => ({
+          ...prev,
+          timer: data.timeLeft
+        }));
+    };
+
+    const handleGameOver = (data: {
+  scores: { username: string; score: number }[];
+    }) => {
+      setFinalScores(data.scores);
+      setShowScoreboard(false);
+      setShowGameOver(true);
+    };
+
+
     // Attach Listeners
     socket.on("game-started", handleGameStarted);
     socket.on("room-updated", handleRoomUpdated);
@@ -377,6 +401,8 @@ export const GamePage = () => {
     socket.on("turn-started", handleTurnStarted);
     socket.on("image-generation-started",handleImageGenerationStarted);
     socket.on("image-generation-failed",handleImageGenerationFailed);
+    socket.on("timer-update", handleTimerUpdate);
+    socket.on("game-over", handleGameOver);
 
     // Reconnect emission
     socket.emit("reconnect-room", { username, roomCode });
@@ -395,12 +421,46 @@ export const GamePage = () => {
       socket.off("turn-started", handleTurnStarted);
       socket.off("image-generation-started",handleImageGenerationStarted);
       socket.off("image-generation-failed",handleImageGenerationFailed);
+      socket.off("timer-update", handleTimerUpdate);
+      socket.off("game-over", handleGameOver);
     };
   }, [roomCode, username]);
 
   return (
     <div className="min-h-screen bg-[#171717] text-[#171717] flex flex-col font-sans p-3 sm:p-5 md:p-6">
       
+      {/* FINAL RESULT OVERLAY */}
+      {showGameOver && (
+        <div className="fixed inset-0 z-[100] bg-[#171717]/90 flex items-center justify-center">
+          <div className="bg-[#e9dfc4] border-4 border-[#171717] p-8 w-full max-w-lg">
+            <h2 className="font-display text-4xl font-black uppercase">
+              CASE CLOSED
+            </h2>
+
+            <p className="font-mono text-xs mt-2 mb-6">
+              FINAL RESULTS
+            </p>
+
+            <div className="space-y-3">
+              {finalScores
+                .sort((a, b) => b.score - a.score)
+                .map((player, index) => (
+                  <div
+                    key={player.username}
+                    className="flex justify-between border border-[#171717] px-4 py-3 font-mono"
+                  >
+                    <span>
+                      {index + 1}. {player.username}
+                    </span>
+
+                    <strong>{player.score} PTS</strong>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
        {/* SCOREBOARD OVERLAY */}
           {showScoreboard && (
         <div className="fixed inset-0 z-50 bg-[#171717]/90 flex items-center justify-center p-4">
@@ -563,7 +623,7 @@ export const GamePage = () => {
                     )}
 
               {/* OVERLAY: PROMPT SELECTION (Shown to Drawer ONLY after Round Banner finishes) */}
-              {isDrawer && !showRoundBanner && isGeneratingPrompts && isSelectingPrompt && prompts.length > 0 && (
+              {isDrawer && !showRoundBanner && !isGeneratingPrompts && isSelectingPrompt && prompts.length > 0 && (
                 <div className="absolute inset-0 bg-[#171717]/85 backdrop-blur-xs flex flex-col items-center justify-center p-6 z-30">
                   <div className="bg-[#e9dfc4] border-2 border-[#171717] p-6 max-w-md w-full shadow-[6px_6px_0px_0px_rgba(178,34,34,1)] relative">
                     <div className="absolute -top-3 left-4 bg-[#b22222] text-[#f0ece1] px-2 py-0.5 font-mono text-[10px] tracking-widest uppercase border border-[#171717]">

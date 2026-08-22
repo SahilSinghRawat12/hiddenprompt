@@ -20,6 +20,9 @@ export async function startNextTurn(io: Server , roomCode: string) {
         room.currentRound++;
 
         if (room.currentRound > room.settings.maxRounds) {
+             
+            room.gameStarted = false;
+
             io.to(roomCode).emit("game-over", {
                 scores: room.players.map((player) => ({
                     username: player.username,
@@ -44,14 +47,20 @@ export async function startNextTurn(io: Server , roomCode: string) {
 
     //Generate new prompt
       const prompts = await promptGeneratorAi();
-      room.promptOptions = prompts!;
+
+      if(!prompts || prompts.length !== 4) {
+        io.to(roomCode).emit("game-error", "Failed to generate prompts.");
+        return;
+      }
+
+      room.promptOptions = prompts;
 
       // Tell everyone who is drawing
       io.to(roomCode).emit("turn-started" , {
         round: room.currentRound,
         drawerId: nextDrawer.socketId,
         drawerUsername: nextDrawer.username,
-        guessTime: room.settings.guessTime
+        // guessTime: room.settings.guessTime
       });
 
       //GIve prompts only to drawer

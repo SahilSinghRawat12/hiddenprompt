@@ -94,4 +94,3 @@ export async function promptGeneratorAi() {
     }
 }
 
-promptGeneratorAi();
