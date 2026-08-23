@@ -22,6 +22,7 @@ export async function startNextTurn(io: Server , roomCode: string) {
         if (room.currentRound > room.settings.maxRounds) {
              
             room.gameStarted = false;
+            room.timeLeft = 0;
 
             io.to(roomCode).emit("game-over", {
                 scores: room.players.map((player) => ({
@@ -29,6 +30,8 @@ export async function startNextTurn(io: Server , roomCode: string) {
                     score: player.score,
                 })),
             });
+
+            //5-second restart countdown
 
             return;
         }
@@ -44,6 +47,7 @@ export async function startNextTurn(io: Server , roomCode: string) {
         room.promptOptions = [];
         room.guessedPlayers = [];
         room.turnEnded = false;
+        room.timeLeft = 0;
 
     //Generate new prompt
       const prompts = await promptGeneratorAi();

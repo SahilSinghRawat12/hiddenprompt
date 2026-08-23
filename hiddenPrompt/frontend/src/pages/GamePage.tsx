@@ -381,11 +381,17 @@ export const GamePage = () => {
     };
 
     const handleGameOver = (data: {
-  scores: { username: string; score: number }[];
+      scores: { username: string; score: number }[];
     }) => {
-      setFinalScores(data.scores);
       setShowScoreboard(false);
       setShowGameOver(true);
+      setFinalScores(data.scores);
+    };
+
+    const handleRestartGame = () => {
+      socket.emit("restart-game" , {
+        roomCode
+      })
     };
 
 

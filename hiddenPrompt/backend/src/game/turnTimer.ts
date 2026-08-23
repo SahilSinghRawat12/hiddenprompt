@@ -13,19 +13,19 @@ export function startTurnTimer(io: Server, roomCode: string) {
     //Clear any existing timer
     clearTurnTimer(roomCode);
 
-    let timeLeft = room.settings.guessTime;
+    room.timeLeft = room.settings.guessTime;
 
     io.to(roomCode).emit("timer-update" , {
-        timeLeft
+        timeLeft: room.timeLeft
     });
 
     const timer = setInterval(() => {
         
-        timeLeft--;
+        room.timeLeft--;
 
-        io.to(roomCode).emit("timer-update" , { timeLeft });
+        io.to(roomCode).emit("timer-update" , { timeLeft: room.timeLeft });
 
-        if(timeLeft <= 0)
+        if(room.timeLeft <= 0)
         {
             clearTurnTimer(roomCode);
             endTurn(io , roomCode);

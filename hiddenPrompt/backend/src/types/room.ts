@@ -14,6 +14,7 @@ export type Room = {
         guessTime: number;
     }
 
+    timeLeft: number;
     gameStarted: boolean;
     currentRound: number;
     currentDrawerIndex: number;

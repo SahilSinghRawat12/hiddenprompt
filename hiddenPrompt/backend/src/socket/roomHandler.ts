@@ -40,6 +40,7 @@ import { generateRoomCode } from "../utils/generateRoomCode.js";
                     maxRounds: 3,
                     guessTime: 60,
                 },                
+                timeLeft: 0,
                 gameStarted: false,
                 currentRound: 0,
                 currentDrawerIndex: 0,

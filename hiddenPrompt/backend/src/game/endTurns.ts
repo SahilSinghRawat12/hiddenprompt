@@ -16,9 +16,9 @@ export function endTurn(io: Server, roomCode: string) {
 
     // Clear active turn interval
     clearTurnTimer(roomCode);
-    
-    room.turnEnded = true;
 
+    room.turnEnded = true;
+    room.timeLeft = 0;
 
     // Send scoreboard data to everyone
     io.to(roomCode).emit("turn-ended", {

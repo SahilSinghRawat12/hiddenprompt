@@ -3,6 +3,7 @@ import { rooms } from "../state/rooms.js";
 import { broadcastRoomState } from "../utils/broadcastRoomState.js";
 import { generateImage } from "../ai/imageGenerator.js";
 import { startTurnTimer } from "../game/turnTimer.js";
+import { promptGeneratorAi } from "../ai/promptGenerator.js";
 
 
 
@@ -277,6 +278,61 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
                     });
                 }
         } );
+
+        socket.on("restart-game" , async ({roomCode}) => {
+            const code = roomCode?.trim().toUpperCase();
+            const room = rooms.get(code);
+
+            if(!room) return;
+
+            if(socket.id != room.hostSocketId) return;
+
+            if(room.gameStarted) return;
+
+            //Reset game
+            room.gameStarted = true;
+            room.currentRound = 1;
+            room.currentDrawerIndex = 0;
+            room.currentWord = null;
+            room.currentImageUrl = null;
+            room.promptOptions = [];
+            room.guessedPlayers = [];
+            room.turnEnded = false;
+            room.timeLeft = 0;
+
+            //Reset scores
+            room.players.forEach((player) => {
+                player.score = 0;
+            });
+
+            //Generate first prompts 
+            const prompts = await promptGeneratorAi();
+
+            if(!prompts || prompts.length !== 4)
+            {
+                room.gameStarted = false;
+                socket.emit("game-error", "Failed to generate prompts.");
+                return;
+            }
+
+            room.promptOptions = prompts;
+
+            const drawer = room.players[0];
+
+            if (!drawer) return;
+
+            io.to(roomCode).emit("game-started" , {
+                round: 1,
+                totalRounds: room.settings.maxRounds,
+                drawer: drawer.username,
+                drawerId: drawer.socketId,
+            });
+
+            io.to(drawer.socketId).emit("prompt-options", {
+                prompts,
+            });
+            
+        })
 
       }
         

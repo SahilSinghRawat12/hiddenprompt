@@ -4,6 +4,7 @@ import { broadcastRoomState } from "../utils/broadcastRoomState.js";
 import { endTurn } from "../game/endTurns.js";
 
 export const registerChatHandler = (io: Server, socket: Socket) => {
+  
   socket.on("send-message", ({ roomCode, message }: { roomCode: string; message: string }) => {
     const code = roomCode?.trim().toUpperCase();
     const cleanMessage = message?.trim();
@@ -35,8 +36,20 @@ export const registerChatHandler = (io: Server, socket: Socket) => {
 
       // 1. Award points to Guesser
       const guesser = room.players.find((p) => p.socketId === socket.id);
+
+      // Calculate points based on remaining time
+                const maxTime = room.settings.guessTime;
+                const timeLeft = room.timeLeft ?? 0;
+
+       const points = Math.max(
+                    10,
+                    Math.round(
+                        (timeLeft / maxTime) * 150
+                    )
+                );
+
       if (guesser) {
-        guesser.score += 100;
+        guesser.score += points;
       }
 
       // 2. Award points to Drawer for a successful guess
@@ -47,7 +60,7 @@ export const registerChatHandler = (io: Server, socket: Socket) => {
       // Broadcast system notification for correct guess
       io.to(code).emit("chat-message", {
         sender: "System",
-        text: `${socket.data.username || "A detective"} guessed the word correctly!`,
+        text: `${socket.data.username || "A detective"} guessed the word correctly! +${points} points`,
         isSystem: true,
       });
 
