@@ -1,6 +1,8 @@
 import { Server } from "socket.io"
 import { rooms } from "../state/rooms.js"
 import { promptGeneratorAi } from "../ai/promptGenerator.js";
+import { restartGame } from "./restartGame.js";
+
 
 
 
@@ -23,6 +25,7 @@ export async function startNextTurn(io: Server , roomCode: string) {
              
             room.gameStarted = false;
             room.timeLeft = 0;
+            room.hint = null;
 
             io.to(roomCode).emit("game-over", {
                 scores: room.players.map((player) => ({
@@ -32,8 +35,31 @@ export async function startNextTurn(io: Server , roomCode: string) {
             });
 
             //5-second restart countdown
+            for(let i=5;i>=1;i--)
+            {
+
+                //Room may have been deleted during countdown
+                if(!rooms.has(roomCode)) return;
+
+                io.to(roomCode).emit("game-restart-countdown", {
+                    timeLeft: i,
+                });
+
+                await new Promise((resolve) => setTimeout(resolve , 1000));
+
+                
+            }
+
+            // Safely restart game
+            try {
+                    await restartGame(io, roomCode);
+                } catch (err) {
+                    console.error("Failed to restart game automatically:", err);
+                    io.to(roomCode).emit("game-error", "Failed to restart game.");
+                }
 
             return;
+            
         }
     }
 
@@ -48,6 +74,7 @@ export async function startNextTurn(io: Server , roomCode: string) {
         room.guessedPlayers = [];
         room.turnEnded = false;
         room.timeLeft = 0;
+        room.hint = null;
 
     //Generate new prompt
       const prompts = await promptGeneratorAi();

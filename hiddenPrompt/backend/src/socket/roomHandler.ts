@@ -49,6 +49,7 @@ import { generateRoomCode } from "../utils/generateRoomCode.js";
                 currentImageUrl: null,
                 guessedPlayers: [],
                 turnEnded: false,
+                hint: null,
             });
             
             // join socket room and notify client

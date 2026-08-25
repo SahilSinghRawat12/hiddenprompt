@@ -23,5 +23,6 @@ export type Room = {
     currentImageUrl: string | null;
     guessedPlayers: string[];
     turnEnded: boolean;
+    hint: string | null;
 
 }
