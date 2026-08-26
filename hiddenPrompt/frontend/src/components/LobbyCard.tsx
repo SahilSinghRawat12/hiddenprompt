@@ -14,7 +14,7 @@ const LobbyCard = ({roomCode, roomData} : {roomCode: string , roomData: RoomData
 
         useEffect(() => {
 
-            const handleGameStarted = (data: {round:number , drawer:string}) => {
+            const handleGameStarted = () => {
                 navigate(`/game/${roomCode}`);
             }
 

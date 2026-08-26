@@ -1,5 +1,5 @@
   import React, { useEffect, useState, useRef } from "react";
-  import { useNavigate, useParams } from "react-router-dom";
+  import {  useParams } from "react-router-dom";
   import { socket } from "../socket/socket";
   import type { RoomUser } from "../types/socket";
   import toast from "react-hot-toast";
