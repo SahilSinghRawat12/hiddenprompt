@@ -20,7 +20,7 @@ const io = new Server(server , {
 //register all socket events
 registerSocketEvents(io);
 
-server.listen(PORT , "0.0.0.0" () => {
+server.listen(PORT , "0.0.0.0", () => {
     console.log(`server is listening to http://localhost:${PORT}`);
     
 });
