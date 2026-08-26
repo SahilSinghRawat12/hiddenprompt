@@ -146,81 +146,82 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
         });
 
         //SELECT PROMPT
-        socket.on("select-prompt" , async ( {roomCode , selectedPrompt} : {roomCode:string , selectedPrompt:string} ) => {
+socket.on("select-prompt", async ({ roomCode, selectedPrompt }: { roomCode: string; selectedPrompt: string }) => {
+    if (!roomCode || !selectedPrompt) return;
+    const code = roomCode.trim().toUpperCase();
 
-            if(!roomCode || !selectedPrompt) return;
-             const code = roomCode.trim().toUpperCase();
+    const room = rooms.get(code);
+    if (!room || !room.gameStarted || !socket.rooms.has(code)) return;
 
-             const room = rooms.get(code);
-            if(!room || !room.gameStarted || !socket.rooms.has(code)) return;
+    // Prevent double selection
+    if (room.currentWord) return;
 
-            //prevent double selection
-            if(room.currentWord) return; // Word has already been selected for this round
+    const currentDrawerSocketId = room.players[room.currentDrawerIndex]?.socketId;
+    if (currentDrawerSocketId !== socket.id) return;
 
-            const currentDrawer = room.players[room.currentDrawerIndex]?.socketId;
+    // Check if the prompt is in the offered list
+    const isValidPrompt = room.promptOptions?.includes(selectedPrompt);
+    if (!isValidPrompt) return;
 
-            if(currentDrawer !== socket.id) return;
+    // Temporarily lock word to prevent double selection
+    room.currentWord = selectedPrompt;
 
-            // check if the prompt is actually in the offered list
-            const isValidPrompt = room.promptOptions?.includes(selectedPrompt);
-            if(!isValidPrompt) return;
+    // Notify room that generation started
+    io.to(code).emit("image-generation-started");
 
-            // Set current word early to lock double-selection
-            room.currentWord = selectedPrompt;
-            room.promptOptions = [];
+    try {
+        // Attempt image generation with your existing generateImage function
+        const image = await generateImage(selectedPrompt);
+        const imageData = `data:image/png;base64,${image.toString("base64")}`;
 
-            // Notify EVERYONE in the room that image generation has started
-            io.to(code).emit("image-generation-started");
+        // Success: Commit room state
+        room.currentWord = selectedPrompt;
+        room.promptOptions = [];
+        room.currentImageUrl = imageData;
+        room.guessedPlayers = [];
+        room.turnEnded = false;
 
-            
-        try {
-                //Generate image
-            const image = await generateImage(selectedPrompt);
-            const imageData = `data:image/png;base64,${image.toString("base64")}`;
-
-            //All validation passed: Now apply state , updates and broadcast
-            room.currentWord = selectedPrompt;
-            room.promptOptions = [];  // clear options after choice
-            room.currentImageUrl = imageData;
-
-            room.guessedPlayers = [];
-            room.turnEnded = false;
-
-
-            const drawerSocketId = room.players[room.currentDrawerIndex]?.socketId;
-
-            if(!drawerSocketId) return;
-            // Notify drawer with full word
-            io.to(drawerSocketId).emit("round-started" , {
-                word: room.currentWord,
-                image: imageData,
-                guessTime: room.settings.guessTime,
-                drawerId: drawerSocketId
-            });
-
-            // Notify guessers with word structure (e.g. length) (excluding drawer) instead of the actual word
-            io.to(code).except(drawerSocketId).emit("round-started" , {
-                wordLength: room.currentWord.length,
-                image: imageData,
-                guessTime: room.settings.guessTime,
-                drawerId: drawerSocketId,
-            });
-
-            startTurnTimer(io , code);
-            startHintTimer(io, code);
-        }
-            catch (error) {
-                    console.error("Image generation failed:", error);
-
-                    room.currentWord = null;
-                    room.promptOptions = []; // or restore them if you want
-
-                    // Notify room that generation failed so clients can reset loading state
-                    io.to(code).emit("image-generation-failed");
-                    socket.emit("game-error", "Failed to generate image.");
-                }
- 
+        // Notify drawer
+        io.to(currentDrawerSocketId).emit("round-started", {
+            word: room.currentWord,
+            image: imageData,
+            guessTime: room.settings.guessTime,
+            drawerId: currentDrawerSocketId
         });
+
+        // Notify guessers
+        io.to(code).except(currentDrawerSocketId).emit("round-started", {
+            wordLength: room.currentWord.length,
+            image: imageData,
+            guessTime: room.settings.guessTime,
+            drawerId: currentDrawerSocketId
+        });
+
+        startTurnTimer(io, code);
+        startHintTimer(io, code);
+
+    } catch (error) {
+        console.error("Image generation failed. Regenerating prompts for drawer...", error);
+
+        // 1. Reset current selection locks
+        room.currentWord = null;
+
+        // 2. Generate a NEW set of 4 prompts
+        const newPrompts = getRandomPrompts(words, 4);
+        room.promptOptions = newPrompts;
+
+        // 3. Inform the room that generation failed to hide spinner
+        io.to(code).emit("image-generation-failed");
+
+        // 4. Send the NEW prompts directly to the drawer so they can pick again
+        io.to(currentDrawerSocketId).emit("prompt-options", {
+            prompts: room.promptOptions
+        });
+
+        // 5. Send error toast to drawer explaining why they got new choices
+        socket.emit("game-error", "Image generation failed for that word. Please select a new prompt!");
+    }
+});
 
         //CURRENT GAME STATE
         socket.on("get-current-game-state" , (roomCode: string) => {
@@ -250,10 +251,13 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
                         prompts: isDrawer ? room.promptOptions : []
                     });
                   }else {
-                                // Guesser waiting for drawer to pick
+                        // Guesser waiting for drawer to pick
                         socket.emit("current-game-state", {
                             phase: "prompt-selection",
                             drawerId: currentDrawer?.socketId,
+                            totalRounds: room.settings.maxRounds,
+                            drawerUsername: currentDrawer?.username,
+                            prompts: []
                         });
                     }
                     return;
@@ -278,7 +282,9 @@ function getRandomPrompts(wordPool: string[] , count: number = 4): string[] {
                         image: room.currentImageUrl,
                         guessTime: room.settings.guessTime,
                         drawerId: currentDrawer?.socketId,
-                        round: room.currentRound
+                        round: room.currentRound,
+                        totalRounds: room.settings.maxRounds,
+                        timeLeft: room.timeLeft
                     });
                 }
         } );

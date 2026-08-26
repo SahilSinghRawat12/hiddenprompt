@@ -16,6 +16,7 @@ export const broadcastRoomState = (io: Server , roomCode: string)=>
         rounds: room.settings.maxRounds,
         guessTime: room.settings.guessTime,
         drawerSocketId: currentDrawer?.socketId || "",
+        currentRound: room.currentRound,
         drawerUsername: currentDrawer?.username || ""
     });
 }

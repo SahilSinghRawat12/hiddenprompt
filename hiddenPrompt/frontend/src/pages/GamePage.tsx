@@ -3,6 +3,8 @@
   import { socket } from "../socket/socket";
   import type { RoomUser } from "../types/socket";
   import toast from "react-hot-toast";
+  import { GameOverScreen } from "../components/GameOverScreen";
+
 
   // Type definition for room-updated payload
   interface RoomStatePayload {
@@ -13,6 +15,12 @@
     drawerUsername?: string;
     rounds: number;
     guessTime: number;
+  }
+
+  export interface FinalScorePlayer {
+    username: string;
+    score: number;
+    rank: number;
   }
 
   export const GamePage = () => {
@@ -62,11 +70,7 @@
     >([]);
 
     const [showGameOver, setShowGameOver] = useState(false);
-    const [finalScores , setFinalScores] = useState<
-    {
-      username: string;
-      score: number;
-    }[]>([]);
+    const [finalScores , setFinalScores] = useState<FinalScorePlayer[]>([]);
 
     const [restartCountdown, setRestartCountdown] = useState<number | null>(null);
 
@@ -148,7 +152,7 @@
         }, 2500);
       };
 
-      const handleRoomUpdated = (data: RoomStatePayload) => {
+      const handleRoomUpdated = (data: RoomStatePayload & { currentRound?: number }) => {
         if (data && Array.isArray(data.players)) {
           setPlayers(data.players);
         }
@@ -164,6 +168,7 @@
         if (data?.drawerUsername) {
           setHeaderData((prev) => ({
             ...prev,
+            round: data?.currentRound ?? prev.round,
             drawerUsername: data.drawerUsername!
           }));
         }
@@ -234,83 +239,62 @@
         socket.emit("get-current-game-state", roomCode);
       };
 
-        const handleCurrentGameState = (data: {
-        phase: "prompt-selection" | "round";
-        prompts?: string[];
-        round: number;
-        totalRounds: number;
-        drawerUsername: string;
-        word?: string;
-        wordLength?: number;
-        image?: string;
-        guessTime: number;
-        drawerId?: string;
-        timeLeft: number;
-      }) => {
-        const activeDrawerId = data.drawerId || drawerSocketId;
-        const amIDrawer = Boolean(socket.id && socket.id === activeDrawerId);
 
-        if (data.drawerId) {
-          setDrawerSocketId(data.drawerId);
-        }
+const handleCurrentGameState = (data: {
+  phase: "prompt-selection" | "round";
+  prompts?: string[];
+  round?: number;
+  totalRounds?: number;
+  drawerUsername?: string;
+  word?: string;
+  wordLength?: number;
+  image?: string;
+  guessTime?: number;
+  drawerId?: string;
+  timeLeft?: number;
+}) => {
+  // 1. Sync total rounds & drawer socket ID
+  if (data.totalRounds !== undefined && data.totalRounds > 0) {
+    setTotalRounds(data.totalRounds);
+  }
+  
+  if (data.drawerId) {
+    setDrawerSocketId(data.drawerId);
+  }
 
-        if (data.phase === "prompt-selection") {
-          setHeaderData((prev) => ({
-            ...prev,
-            round: data.round ?? prev.round,
-            drawerUsername: data.drawerUsername ?? prev.drawerUsername,
-            timer: data.guessTime ?? prev.timer
-          }));
+  // 2. Directly force server round & header state
+  setHeaderData((prev) => ({
+    round: data.round !== undefined ? data.round : prev.round,
+    drawerUsername: data.drawerUsername || prev.drawerUsername,
+    timer: data.timeLeft ?? data.guessTime ?? prev.timer,
+  }));
 
-          if (data.totalRounds !== undefined) {
-            setTotalRounds(data.totalRounds);
-          }
+  const activeDrawerId = data.drawerId || drawerSocketId;
+  const amIDrawer = Boolean(socket.id && socket.id === activeDrawerId);
 
-          // 1. Show round banner first
-          updateShowRoundBanner(true);
-          setIsSelectingPrompt(false);
+  // DO NOT trigger the intro round banner on mid-game refresh
+  updateShowRoundBanner(false);
 
-          // 2. Hide banner and reveal prompts after delay
-          setTimeout(() => {
-            updateShowRoundBanner(false);
+  // 3. Phase Handling
+  if (data.phase === "prompt-selection") {
+    if (amIDrawer) {
+      setPrompts(data.prompts || []);
+      setIsSelectingPrompt(true);
+    } else {
+      setIsSelectingPrompt(false);
+    }
+    return;
+  }
 
-            // Use fresh amIDrawer variable calculated from data.drawerId
-            if (amIDrawer) {
-              setPrompts(data.prompts || []);
-              setIsSelectingPrompt(true);
-            } else {
-              setIsSelectingPrompt(false);
-            }
-          }, 2500);
+  if (data.phase === "round") {
+    setIsSelectingPrompt(false);
+    setPrompts([]);
 
-          return;
-        }
-
-        if (data.phase === "round") {
-          setShowRoundBanner(false);
-          setIsSelectingPrompt(false);
-          setPrompts([]);
-
-          if (data.timeLeft !== undefined) {
-            setHeaderData((prev) => ({
-              ...prev,
-              timer: data.timeLeft
-            }));
-          }
-
-          if (data.image) {
-            setCurrentImage(data.image);
-          }
-
-          if (data.word) {
-            setCurrentWord(data.word);
-          }
-
-          if (data.wordLength !== undefined) {
-            setWordLength(data.wordLength);
-          }
-        }
-      };
+    if (data.image) setCurrentImage(data.image);
+    if (data.word) setCurrentWord(data.word);
+    if (data.wordLength !== undefined) setWordLength(data.wordLength);
+  }
+};
 
       const handleChatMessage = (data : {
         sender?: string;
@@ -384,7 +368,7 @@
         setIsSelectingPrompt(true);
       }
 
-    };
+    }
 
     return {
       ...prev,
@@ -435,9 +419,18 @@
       const handleGameOver = (data: {
         scores: { username: string; score: number }[];
       }) => {
+
+        // Sort scores descending just in case the server sent them unsorted
+        const sorted = [...data.scores]
+        .sort((a,b) => b.score - a.score)
+        .map((player, index) => ({
+          ...player,
+          rank: index + 1,
+        }));
+
         setShowScoreboard(false);
         setShowGameOver(true);
-        setFinalScores(data.scores);
+        setFinalScores(sorted);
       };
 
       // const handleRestartGame = () => {
@@ -554,6 +547,8 @@
         socket.off("word-hint", handleWordHint);
       };
     }, [roomCode, username]);
+
+
 
     return (
       <div className="min-h-screen bg-[#171717] text-[#171717] flex flex-col font-sans p-3 sm:p-5 md:p-6">

@@ -23,11 +23,18 @@ const Home = () => {
       navigate(`/lobby/${roomCode}`)
     }
 
-    const handleRoomJoin = ({ success , roomCode , message}: {success: boolean , roomCode?: string, message?:string}) => {
+    const handleRoomJoin = ({ success , roomCode, gameStarted , message}: {success: boolean , roomCode?: string, gameStarted?: boolean, message?:string}) => {
       if(success && roomCode)
       {
         setShowJoinModal(false);
-        navigate(`/lobby/${roomCode}`)
+
+        // If game has ALREADY started, jump directly to Game page
+        if (gameStarted) {
+          navigate(`/game/${roomCode}`);
+        } else {
+          // Otherwise, go to Lobby page
+          navigate(`/lobby/${roomCode}`);
+        }
       } else {
         toast.error(message || "Failed to Join the Room");
       }
@@ -53,9 +60,14 @@ const Home = () => {
 
   const handleJoinRoom = ({roomCode , username}: {roomCode: string , username: string}) =>
   {
+    if (!username.trim() || !roomCode.trim()) return;
+
+    // Save username to localStorage before emitting
     localStorage.setItem("username" , username);
 
-    socket.emit("join-room" , { username , room: roomCode });
+    // If game has ALREADY started, jump straight to /game/:roomCode
+
+    socket.emit("join-room" , { username: username.trim() , room: roomCode.trim().toUpperCase() });
   };
 
   const handleSwitchToCreate = () => {

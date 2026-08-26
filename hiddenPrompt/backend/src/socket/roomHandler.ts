@@ -2,6 +2,9 @@ import type {Server, Socket} from "socket.io";
 import { rooms } from "../state/rooms.js";
 import { broadcastRoomState } from "../utils/broadcastRoomState.js";
 import { generateRoomCode } from "../utils/generateRoomCode.js";
+import { startNextTurn } from "../game/startNextTurn.js";
+import { clearHintTimer } from "../game/hintTimer.js";
+
        
 
     export const registerRoomHandler = (io: Server , socket: Socket) => {
@@ -76,93 +79,118 @@ import { generateRoomCode } from "../utils/generateRoomCode.js";
         });
 
          
-        //JOIN ROOM
-         socket.on("join-room" , ({username, room}: {username: string , room: string}) => {
+       // JOIN ROOM
+socket.on("join-room", ({ username, room }: { username: string; room: string }) => {
 
-            const sanitizedUsername = username?.trim();
-            const roomCode = room?.trim().toUpperCase();
+    const sanitizedUsername = username?.trim();
+    const roomCode = room?.trim().toUpperCase();
 
-            // Validation
-            if (!sanitizedUsername) {
-                socket.emit("join-success", { success: false, message: "Username cannot be empty"}); // or "create-error"
-                return;
-            }
+    // Validation
+    if (!sanitizedUsername) {
+        socket.emit("join-success", { success: false, message: "Username cannot be empty" });
+        return;
+    }
 
-            if (!roomCode) {
-                socket.emit("join-success", { success: false, message: "Room code is required" });
-                return;
-            }
-            
-            //check if target room exists
-            const targetRoom = rooms.get(roomCode);
+    if (!roomCode) {
+        socket.emit("join-success", { success: false, message: "Room code is required" });
+        return;
+    }
 
-            if(!targetRoom)
-            {
-                socket.emit("join-success", { success: false, message: "Room not found"});
-                return;
-            }
+    // check if target room exists
+    const targetRoom = rooms.get(roomCode);
 
-            //check if username already exists in the target room
-            const userNameExists = targetRoom.players.some(
-                (u) => u.username.toLowerCase() === sanitizedUsername.toLowerCase()
+    if (!targetRoom) {
+        socket.emit("join-success", { success: false, message: "Room not found" });
+        return;
+    }
+
+    // check if username already exists in the target room
+    const userNameExists = targetRoom.players.some(
+        (u) => u.username.toLowerCase() === sanitizedUsername.toLowerCase()
+    );
+
+    if (userNameExists) {
+        socket.emit("join-success", { success: false, message: "Username already taken in this room" });
+        return;
+    }
+
+    // leave previous room (both socket io room and map)
+    if (socket.data.currentRoom) {
+        const oldRoomCode = socket.data.currentRoom;
+        const oldRoomData = rooms.get(oldRoomCode);
+
+        if (oldRoomData) {
+            oldRoomData.players = oldRoomData.players.filter(
+                (u) => u.socketId !== socket.id
             );
 
-            if(userNameExists)
-            {
-                socket.emit("join-success", { success: false, message: "Username already taken in this room" });
-                return;
-            }
-
-            // leave previous room (both socket io room and map)
-            if(socket.data.currentRoom)
-            {
-                const oldRoomCode = socket.data.currentRoom;  //if user joined another room then current room becomes old room
-                const oldRoomData = rooms.get(oldRoomCode);  // we take the data from oldroom
-                
-                if(oldRoomData)
-                {
-                    oldRoomData.players = oldRoomData.players.filter(
-                        (u) => u.socketId !== socket.id
-                    )
-
-                    if(oldRoomData.players.length === 0)
-                    {
-                        rooms.delete(oldRoomCode);
-                    } else {
-                        //transfer host if host has left
-                        if (oldRoomData.hostSocketId === socket.id) {
-                            oldRoomData.hostSocketId = oldRoomData.players[0]!.socketId;
-                        }
-                        // Notify old room users that player left
-                        socket.to(oldRoomCode).emit("user-left", `${socket.data.username || "A user"} left the room`);
-                        broadcastRoomState(io, oldRoomCode);
-                    }
+            if (oldRoomData.players.length === 0) {
+                rooms.delete(oldRoomCode);
+            } else {
+                // transfer host if host has left
+                if (oldRoomData.hostSocketId === socket.id) {
+                    oldRoomData.hostSocketId = oldRoomData.players[0]!.socketId;
                 }
-
-                socket.leave(oldRoomCode);                
+                // Notify old room users that player left
+                socket.to(oldRoomCode).emit("user-left", `${socket.data.username || "A user"} left the room`);
+                broadcastRoomState(io, oldRoomCode);
             }
+        }
 
-            //add player to target room
-            targetRoom.players.push({
-                username: sanitizedUsername,
-                socketId: socket.id,
-                score: 0
-            })
+        socket.leave(oldRoomCode);
+    }
 
-            socket.join(roomCode);
+    // add player to target room
+    targetRoom.players.push({
+        username: sanitizedUsername,
+        socketId: socket.id,
+        score: 0
+    });
 
-            socket.data.currentRoom = roomCode;
-            socket.data.username = sanitizedUsername;
+    socket.join(roomCode);
 
+    socket.data.currentRoom = roomCode;
+    socket.data.username = sanitizedUsername;
 
+    // Send data to yourself -> Emit success response to the joining client
+    socket.emit("join-success", { success: true, roomCode, gameStarted: targetRoom.gameStarted });
+    
+    // Send data to others except yourself
+    socket.to(roomCode).emit("user-joined", `${sanitizedUsername} joined the room`);
 
-            //send data to yourself -> Emit success response to the joining client
-            socket.emit("join-success" , {success: true, roomCode})
-            //send data to others except yourself
-            socket.to(roomCode).emit("user-joined" , `${sanitizedUsername} joined the room`);
-            
-            broadcastRoomState(io, roomCode);
-         });
+    broadcastRoomState(io, roomCode);
+
+    // --- MID-GAME JOIN FIX ---
+    // If the game has ALREADY started, immediately send the active state to the late joiner
+    if (targetRoom.gameStarted) {
+        const currentDrawer = targetRoom.players[targetRoom.currentDrawerIndex];
+
+        if (!targetRoom.currentWord) {
+            // Phase 1: Waiting for drawer to pick prompt
+            socket.emit("current-game-state", {
+                phase: "prompt-selection",
+                round: targetRoom.currentRound,
+                totalRounds: targetRoom.settings.maxRounds,
+                drawerId: currentDrawer?.socketId,
+                drawerUsername: currentDrawer?.username,
+                prompts: []
+            });
+        } else {
+            // Phase 2: Active Round (Clue Image, Timer & Word Length)
+            socket.emit("current-game-state", {
+                phase: "round",
+                wordLength: targetRoom.currentWord.length,
+                image: targetRoom.currentImageUrl,
+                guessTime: targetRoom.settings.guessTime,
+                drawerId: currentDrawer?.socketId,
+                drawerUsername: currentDrawer?.username,
+                round: targetRoom.currentRound,
+                totalRounds: targetRoom.settings.maxRounds,
+                timeLeft: targetRoom.timeLeft
+            });
+        }
+    }
+});
 
 
          //RECONNECT ROOM (Handles Refresh)
@@ -263,66 +291,88 @@ import { generateRoomCode } from "../utils/generateRoomCode.js";
          });
 
          
-        //DISCONNECT
-        socket.on("disconnect" , () => {
-           const roomCode = socket.data.currentRoom;
-           const username = socket.data.username;
+        // DISCONNECT
+                socket.on("disconnect", () => {
+                const roomCode = socket.data.currentRoom;
+                const username = socket.data.username;
 
-           if(!roomCode) return;
+                if (!roomCode) return;
 
-           const roomData = rooms.get(roomCode);
+                const roomData = rooms.get(roomCode);
+                if (!roomData) return;
 
-           if(!roomData) return;
+                setTimeout(() => {
+                    // Fetch the freshest room state from the Map inside the timeout
+                    const room = rooms.get(roomCode);
+                    if (!room) return;
 
-           setTimeout(() => {
+                    // Find this specific player in the room list
+                    const playerIndex = room.players.findIndex(
+                    (p) => p.username.toLowerCase() === username.toLowerCase()
+                    );
 
-            // Fetch the freshest room state from the Map inside the timeout
-            const room = rooms.get(roomCode);
+                    const player = room.players[playerIndex];
 
-            if(!room) return;
+                    // If the player is no longer in the room, stop here
+                    if (playerIndex === -1 || !player) return;
 
-           // Find this specific player in the room list
-           const player = room.players.find(
-            (p) => p.username.toLowerCase() === username.toLowerCase()
-           );
+                    // If their room entry now has a NEW socket.id, they reconnected!
+                    if (player.socketId !== socket.id) return;
 
-           // If the player is no longer in the room, stop here
-             if (!player) return;
+                    // Check if the disconnected user was the active drawer
+                    const isCurrentDrawer = room.currentDrawerIndex === playerIndex;
 
-            // Check if the player reconnected during the 2-second period
+                    // If socket IDs match, remove them from the player list
+                    room.players = room.players.filter((p) => p.socketId !== socket.id);
 
-            // If their room entry now has a NEW socket.id, they reconnected! -> Player has a different socket now
-           if(player.socketId !== socket.id)
-           {
-            return;
-           }
+                    // If no players are left, delete the empty room
+                    if (room.players.length === 0) {
+                    clearHintTimer(roomCode); // Clear any active timers
+                    rooms.delete(roomCode);
+                    console.log("Deleted empty room:", roomCode);
+                    } else {
+                    // 1. If the host disconnected, pass leadership to the next player
+                    if (room.hostUsername.toLowerCase() === username.toLowerCase()) {
+                        room.hostUsername = room.players[0]!.username;
+                        room.hostSocketId = room.players[0]!.socketId;
+                    }
 
-           // If socket IDs match, they didn't reconnect — remove them from the player list
-           room.players = room.players.filter(
-            (p) => p.socketId !== socket.id
-           );
+                    // 2. Handle active drawer leaving mid-turn
+                    if (isCurrentDrawer) {
+                        clearHintTimer(roomCode); // Clear current room hint timer
 
-           //If no players are left, delete the empty room
-           if(room.players.length === 0)
-           {
-            rooms.delete(roomCode);
-            console.log("Deleted empty room:", roomCode);
-            console.log(rooms);
-           } else {
-            // If the host disconnected, pass leadership to the next player in line
-            if(room.hostUsername.toLowerCase() === username.toLowerCase())
-            {
-                room.hostUsername = room.players[0]!.username;
-                room.hostSocketId = room.players[0]!.socketId;
-            }
-              // Notify remaining users and push updated room state
-           socket.to(roomCode).emit("user-left" , `${username || "A user"} left the room`);
-           broadcastRoomState(io , roomCode);
-           }
-           
-           },2000);
-           
+                        io.to(roomCode).emit("chat-message", {
+                        isSystem: true,
+                        text: `${username || "The artist"} left the game. Skipping turn...`,
+                        });
 
-        });
+                        if (room.players.length < 2) {
+                        // Not enough players left to play
+                        io.to(roomCode).emit("chat-message", {
+                            isSystem: true,
+                            text: "Not enough players to continue. Waiting for players...",
+                        });
+                        } else {
+                        // Keep currentDrawerIndex valid after array removal
+                        if (room.currentDrawerIndex >= room.players.length) {
+                            room.currentDrawerIndex = 0;
+                        }
+
+                        // Trigger next turn transition (replace with your turn start function)
+                        startNextTurn(io, roomCode);
+                        }
+                    } else {
+                        // If a non-drawer left BEFORE the current drawer in the list, adjust index
+                        if (room.currentDrawerIndex > playerIndex) {
+                        room.currentDrawerIndex -= 1;
+                        }
+                    }
+
+                    // Notify remaining users and push updated room state
+                    socket.to(roomCode).emit("user-left", `${username || "A user"} left the room`);
+                    broadcastRoomState(io, roomCode);
+                    }
+                }, 2000);
+                });
     }
         
