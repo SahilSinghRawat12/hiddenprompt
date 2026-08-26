@@ -1,4 +1,4 @@
-import React from 'react'
+
 
 const Hero = ({ onCreateRoom, onJoinRoom }: { onCreateRoom?: () => void; onJoinRoom?: () => void }) => {
   return (

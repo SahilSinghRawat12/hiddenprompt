@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 
 export function EvidenceCard() {
   // Track redacted state for accessibility and hover touch devices

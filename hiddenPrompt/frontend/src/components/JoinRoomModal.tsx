@@ -1,13 +1,23 @@
-import React, { useState, useEffect } from "react";
+import  { useState, useEffect } from "react";
 
-export default function JoinRoomModal({ isOpen, onClose, onSubmit, onSwitchToCreate }) {
+interface JoinRoomModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: {
+    username: string;
+    roomCode: string;
+  }) => void;
+  onSwitchToCreate: () => void;
+}
+
+export default function JoinRoomModal({ isOpen, onClose, onSubmit, onSwitchToCreate }: JoinRoomModalProps) {
   const [roomCode, setRoomCode] = useState("");
   const [username, setUsername] = useState("");
   const [status, setStatus] = useState("");
 
   // Handle ESC key to close modal
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
         onClose();
       }
@@ -18,7 +28,7 @@ export default function JoinRoomModal({ isOpen, onClose, onSubmit, onSwitchToCre
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!roomCode.trim() || !username.trim()) {
       setStatus("REDACTED: Both fields are required.");

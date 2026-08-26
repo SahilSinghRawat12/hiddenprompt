@@ -1,12 +1,18 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 
-export default function UsernameModal({ isOpen, onClose, onSubmit }) {
+interface UsernameModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (username: string) => void;
+}
+
+export default function UsernameModal({ isOpen, onClose, onSubmit }: UsernameModalProps) {
   const [username, setUsername] = useState("");
   const [status, setStatus] = useState("");
 
   // Handle ESC key to close modal
   useEffect(() => {
-    const handleKeyDown = (e) => {
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" && isOpen) {
         onClose();
       }
@@ -17,7 +23,7 @@ export default function UsernameModal({ isOpen, onClose, onSubmit }) {
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!username.trim()) {
       setStatus("REDACTED: Name cannot be empty.");

@@ -3,7 +3,7 @@
   import { socket } from "../socket/socket";
   import type { RoomUser } from "../types/socket";
   import toast from "react-hot-toast";
-  import { GameOverScreen } from "../components/GameOverScreen";
+  
 
 
   // Type definition for room-updated payload
@@ -25,7 +25,7 @@
 
   export const GamePage = () => {
     const { roomCode } = useParams<{ roomCode: string }>();
-    const navigate = useNavigate();
+    
 
     // Retrieve username from localStorage (saved during room join/creation)
     const username = localStorage.getItem("username") || "";
@@ -37,7 +37,7 @@
     });
 
     const [totalRounds, setTotalRounds] = useState<number>(0);
-    const [gamePhase, setGamePhase] = useState<"prompt-selection" | "round" | null>(null);
+    const [, setGamePhase] = useState<"prompt-selection" | "round" | null>(null);
     const [currentImage, setCurrentImage] = useState("");
     const [currentWord, setCurrentWord] = useState<string>("");
     const [wordLength, setWordLength] = useState<number>(0);
