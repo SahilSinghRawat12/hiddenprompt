@@ -7,7 +7,7 @@ import { Server } from "socket.io";
 import app from "./app.js";
 import { registerSocketEvents } from "./socket/index.js";
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 const server = http.createServer(app);
 const io = new Server(server , {
@@ -20,7 +20,7 @@ const io = new Server(server , {
 //register all socket events
 registerSocketEvents(io);
 
-server.listen(PORT , () => {
+server.listen(PORT , "0.0.0.0" () => {
     console.log(`server is listening to http://localhost:${PORT}`);
     
-})
+});
